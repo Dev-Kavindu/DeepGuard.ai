@@ -30,7 +30,7 @@ function VaultContent() {
   const fetchIncidents = useCallback(async () => {
     const { data, error } = await supabase
       .from("incidents")
-      .select(`*, cameras ( name )`)
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (data) {
@@ -49,6 +49,41 @@ function VaultContent() {
 
   useEffect(() => {
     fetchIncidents();
+
+    // 🟢 Incident Vault එක සඳහා Realtime Listener එකතු කර ඇත (Refresh කිරීමකින් තොරව auto update වීමට)
+    const incidentChannel = supabase
+      .channel("live-vault-incidents")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "incidents" },
+        (payload) => {
+          const newIncident = payload.new;
+          setIncidents((prev) => [newIncident, ...prev]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "incidents" },
+        (payload) => {
+          const updated = payload.new;
+          setIncidents((prev) =>
+            prev.map((inc) => (inc.id === updated.id ? updated : inc))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "incidents" },
+        (payload) => {
+          const deleted = payload.old;
+          setIncidents((prev) => prev.filter((inc) => inc.id !== deleted.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(incidentChannel);
+    };
   }, [fetchIncidents]);
 
   const handleFalseAlarm = async (id: number) => {
@@ -72,8 +107,9 @@ function VaultContent() {
 
   const filteredIncidents = incidents.filter(
     (inc) =>
-      inc.cameras?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.predicted_class?.toLowerCase().includes(searchQuery.toLowerCase())
+      (inc.camera_name && inc.camera_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (inc.predicted_class && inc.predicted_class.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      `inc-${inc.id.toString().padStart(4, "0")}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -157,7 +193,8 @@ function VaultContent() {
                     <td className="px-6 py-4 font-mono text-zinc-300">
                       INC-{incident.id.toString().padStart(4, "0")}
                     </td>
-                    <td className="px-6 py-4">{incident.cameras?.name || "Unknown Camera"}</td>
+                    {/* 🟢 කැමරා නම සෘජුවම incident.camera_name මඟින් ලබාගැනීම (කැමරාව මැකුවත් නම වෙනස් නොවේ) */}
+                    <td className="px-6 py-4">{incident.camera_name || `Camera ${incident.camera_id}`}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1 items-start">
                         <span className={`font-semibold ${incident.is_false_alarm ? "text-zinc-500 line-through" : "text-zinc-200"}`}>

@@ -2,6 +2,7 @@ import modal
 import os
 import time
 import datetime
+from fastapi import Request
 
 app = modal.App("ucf-crime-detection")
 
@@ -27,7 +28,7 @@ CLASSES = [
     "Fighting", "RoadAccidents", "Robbery", "Shooting", "Shoplifting", "Stealing", "Vandalism"
 ]
 
-# --- Cron Job (Free Tier Protection) ---
+# --- Cron Job (Free Tier Protection & Auto Cleanup) ---
 @app.function(
     image=image,
     schedule=modal.Cron("0 * * * *"),
@@ -41,14 +42,14 @@ def auto_cleanup():
     
     now = datetime.now(timezone.utc)
     one_hour_ago = (now - timedelta(hours=1)).isoformat()
-    supabase.table("incidents").delete().eq("anomaly_type", "Normal").lt("created_at", one_hour_ago).execute()
+    supabase.table("incidents").delete().eq("predicted_class", "Normal").lt("created_at", one_hour_ago).execute()
     
     seven_days_ago = (now - timedelta(days=7)).isoformat()
-    old_incidents = supabase.table("incidents").select("video_url").lt("created_at", seven_days_ago).execute()
+    old_incidents = supabase.table("incidents").select("video_clip_url").lt("created_at", seven_days_ago).execute()
     
     files_to_delete = []
     for row in old_incidents.data:
-        url = row.get("video_url")
+        url = row.get("video_clip_url")
         if url:
             filename = url.split("/")[-1]
             files_to_delete.append(filename)
@@ -60,7 +61,7 @@ def auto_cleanup():
     print("✅ Auto-cleanup & Storage freeing completed successfully!")
 
 
-# --- Continuous Stream Processing Function ---
+# --- Continuous Stream Processing Function (GPU Worker) ---
 @app.function(
     image=image, 
     secrets=[modal.Secret.from_name("supabase-secrets")], 
@@ -121,9 +122,15 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
     ])
 
     cap = cv2.VideoCapture(video_url)
+    if not cap.isOpened():
+        print(f"❌ ERROR: Unable to open video feed at: {video_url}")
+        return
+
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    if fps <= 0 or fps > 120:
+        fps = 25.0
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 360
     
     sample_rate = max(1, int(round(fps * 0.5))) 
     buffer_seconds = 10
@@ -132,30 +139,55 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
     raw_buffer = []
     frame_count = 0
     cooldown_frames = 0
+    last_status_check = time.time()  # වෙලාවෙන් check කිරීමට variable එකක්
 
-    print(f"🎬 Processing Stream... (Threshold: {threshold}%)")
+    print(f"🎬 Processing Stream... FPS: {fps:.1f} | Resolution: {width}x{height} | Threshold: {threshold}%")
 
     # Live Loop
     with torch.no_grad():
-        while cap.isOpened():
+        while True:
             ret, frame = cap.read()
             if not ret:
-                # Video ended (if it's an mp4) or stream dropped
-                # Optional: break or try reconnecting if it's RTSP
-                break
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = cap.read()
+                if not ret:
+                    print("⚠️ Video stream disconnected or ended. Reconnecting in 2s...")
+                    time.sleep(2)
+                    cap = cv2.VideoCapture(video_url)
+                    continue
             
             raw_buffer.append(frame)
             if len(raw_buffer) > max_frames:
                 raw_buffer.pop(0)
 
             frame_count += 1
+            current_time = time.time()
+
+            # 🟢 ඇත්තම වෙලාවෙන් තත්පර 15කට වරක් Database එක Check කිරීම
+            if current_time - last_status_check >= 15:
+                last_status_check = current_time
+                try:
+                    cam_record = supabase.table("cameras").select("status").eq("id", camera_id).execute()
+                    if not cam_record.data:
+                        print(f"🛑 Camera {camera_id} was DELETED from Supabase. Terminating GPU worker.")
+                        break
+                    
+                    cam_status = (cam_record.data[0].get("status") or "active").lower()
+                    if cam_status not in ["active", "online"]:
+                        print(f"🛑 Camera {camera_id} deactivated by user. Shutting down GPU worker.")
+                        break
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not check camera status - {e}")
+
             if cooldown_frames > 0:
                 cooldown_frames -= 1
                 continue
 
-            # Run AI every 3 seconds
-            if frame_count % (int(fps) * 3) == 0 and len(raw_buffer) >= (fps * 3):
-                
+            # තත්පර 3කට වරක් AI Inference run කිරීම
+            if frame_count % (int(fps) * 3) == 0:
+                if len(raw_buffer) < (fps * 2):
+                    continue
+
                 sampled_frames = raw_buffer[::sample_rate]
                 batch_tensors = [transform(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)) for f in sampled_frames]
                 
@@ -172,21 +204,32 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     features_tensor = F.interpolate(features_tensor, size=32, mode="linear", align_corners=False)
                     features_tensor = features_tensor.transpose(1, 2)
 
-                outputs = bilstm_model(features_tensor)
-                probs = torch.softmax(outputs, dim=2).squeeze(0)
+                outputs = bilstm_model(features_tensor) # shape: [1, 32, 14]
+                probs = torch.softmax(outputs, dim=2).squeeze(0) # shape: [32, 14]
 
-                seg_prob = (1.0 - probs[:, 0]).cpu().numpy() * 100
-                anomaly_score = np.mean(np.sort(seg_prob)[-3:])
+                seg_prob = (1.0 - probs[:, 0]) * 100.0 # shape: [32]
 
-                max_cls_probs, _ = torch.max(probs, dim=0)
-                pred_id = torch.argmax(max_cls_probs).item()
+                sorted_scores, _ = torch.sort(seg_prob)
+                anomaly_score = float(sorted_scores[-3:].mean().item())
+
+                peak_idx = torch.argmax(seg_prob) 
+                peak_probs = probs[peak_idx]      
+                
+                pred_id = torch.argmax(peak_probs).item()
                 predicted_class = CLASSES[pred_id]
 
+                print(f"📊 [INFERENCE] Cam {camera_id} | Class: {predicted_class} | Score: {anomaly_score:.1f}% (Threshold: {threshold}%)")
+
                 if anomaly_score >= threshold:
-                    print(f"🚨 ANOMALY: {predicted_class} | Score: {anomaly_score:.2f}% | Cam: {camera_id}")
+                    if predicted_class == "Normal":
+                        best_anomaly_idx = torch.argmax(peak_probs[1:]).item() + 1
+                        predicted_class = CLASSES[best_anomaly_idx]
+                        
+                    print(f"🚨 ANOMALY DETECTED: {predicted_class} | Score: {anomaly_score:.2f}% | Cam: {camera_id}")
                     
                     clip_name = f"evidence_cam{camera_id}_{int(time.time())}.mp4"
                     clip_path = f"/tmp/{clip_name}"
+                    
                     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                     out = cv2.VideoWriter(clip_path, fourcc, fps, (width, height))
                     
@@ -210,71 +253,48 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                         )
                     public_url = supabase.storage.from_("incident_vault").get_public_url(clip_name)
                     
+                    # 🟢 Sri Lanka Standard Time (UTC+5:30) සහ camera_name දත්ත ගබඩාවට යැවීම
+                    sri_lanka_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                    local_time = datetime.datetime.now(sri_lanka_tz).isoformat()
+
                     supabase.table("incidents").insert({
                         "camera_id": camera_id,
-                        "anomaly_type": predicted_class,
+                        "camera_name": camera_name,  # <--- මෙමඟින් කැමරාව මකා දැමුවද පරණ නම සදාකාලිකව සුරක්ෂිත වේ
+                        "predicted_class": predicted_class,
                         "anomaly_score": float(anomaly_score),
-                        "video_url": public_url,
-                        "is_false_alarm": False
+                        "video_clip_url": public_url,
+                        "is_false_alarm": False,
+                        "created_at": local_time
                     }).execute()
                     
-                    # 10-second cooldown
-                    cooldown_frames = int(fps * 10)
+                    print(f"💾 Incident saved successfully to Supabase: {clip_name}")
+                    
+                    cooldown_frames = int(fps * 5)
                     raw_buffer.clear()
 
     cap.release()
     print(f"[END] Stream processing stopped for Camera {camera_id}")
 
 
-# --- Local Entrypoint ---
-@app.local_entrypoint()
-def main():
-    import os
-    import time
-    from supabase import create_client
-    
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass
-    
-    supa_url = os.environ.get("SUPABASE_URL", "https://uaskdqvmvezshhegtasl.supabase.co")
-    supa_key = os.environ.get("SUPABASE_KEY")
-    if not supa_key:
-        supa_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." # ඔයාගේ key එක
+# --- Webhook Endpoint (Supabase Real-time Trigger) ---
+@app.function(image=image, secrets=[modal.Secret.from_name("supabase-secrets")])
+@modal.fastapi_endpoint(method="POST")
+async def camera_webhook(request: Request):
+    payload = await request.json()
+    record = payload.get("record", {})
+    event_type = payload.get("type", "")
 
-    supabase = create_client(supa_url, supa_key)
-    response = supabase.table("cameras").select("*").execute()
+    cam_id = record.get("id")
+    cam_name = record.get("name", f"Camera {cam_id}")
+    video_url = record.get("stream_url") or record.get("url")
+    threshold = float(record.get("sensitivity") or record.get("threshold") or 50.0)
     
-    active_cams = [
-        cam for cam in response.data 
-        if cam.get("status") == "active" or cam.get("active") is True or cam.get("status") is None
-    ]
-    
-    print(f"🚀 Starting DeepGuard AI for {len(active_cams)} active cameras...")
-    
-    if len(active_cams) == 0:
-        print("⚠️ No active cameras found!")
-        return
+    cam_status = (record.get("status") or "active").lower()
+    is_active = cam_status in ["active", "online"]
 
-    # Background workers ලා spawn කර reference තබා ගැනීම
-    workers = []
-    for cam in active_cams:
-        video_url = cam.get("stream_url") or cam.get("url")
-        threshold = cam.get("sensitivity") or cam.get("threshold") or 50.0
-        
-        if video_url:
-            print(f"➡️ Spawning GPU AI Worker for CAM {cam['id']}: {cam['name']}...")
-            # Worker spawn කර list එකට එකතු කිරීම
-            call = process_camera_feed.spawn(cam["id"], cam["name"], video_url, threshold)
-            workers.append(call)
+    if event_type in ["INSERT", "UPDATE"] and is_active and video_url:
+        print(f"⚡ [WEBHOOK TRIGGER] Spawning T4 GPU Worker for Camera {cam_id}: {cam_name}")
+        process_camera_feed.spawn(cam_id, cam_name, video_url, threshold)
+        return {"status": "success", "message": f"Worker spawned for camera {cam_id}"}
 
-    print("🟢 All GPU workers spawned! Streaming and processing live... (Press Ctrl+C to stop)")
-    
-    # App එක auto-kill නොවී run වෙන්න loop එකක් තැබීම
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n🛑 Stopping DeepGuard AI workers...")
+    return {"status": "ignored", "message": "Camera is not active or missing stream URL"}

@@ -16,6 +16,7 @@ import { supabase } from "@/lib/supabase";
 interface Incident {
   id: number;
   camera_id: number;
+  camera_name?: string;
   predicted_class: string;
   anomaly_score: number;
   video_clip_url: string;
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [activeCamCount, setActiveCamCount] = useState<number>(0);
   const [totalCamCount, setTotalCamCount] = useState<number>(0);
+  const [todayAlertsCount, setTodayAlertsCount] = useState<number>(0);
 
   const formatTimeAgo = (dateString: string) => {
     const seconds = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
@@ -50,19 +52,35 @@ export default function Dashboard() {
       }
     };
 
+    // 🟢 Recent detections සඳහා උපරිම අයිටම් 5ක් පමණක් ලබාගැනීම
     const fetchRecentIncidents = async () => {
       const { data } = await supabase
         .from("incidents")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(5);
       if (data) setIncidents(data);
+    };
+
+    const fetchTodayAlertsCount = async () => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { count, error } = await supabase
+        .from("incidents")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", todayStart.toISOString());
+
+      if (!error && count !== null) {
+        setTodayAlertsCount(count);
+      }
     };
 
     fetchCameraStats();
     fetchRecentIncidents();
+    fetchTodayAlertsCount();
 
-    // Alerts වලට Realtime Listener
+    // Alerts වලට Realtime Listener (Recent stream එකේ 5ක් පමණක් තබාගැනීම)
     const incidentChannel = supabase
       .channel("live-dashboard-incidents")
       .on(
@@ -70,12 +88,12 @@ export default function Dashboard() {
         { event: "INSERT", schema: "public", table: "incidents" },
         (payload) => {
           const newIncident = payload.new as Incident;
-          setIncidents((prev) => [newIncident, ...prev.slice(0, 9)]);
+          setIncidents((prev) => [newIncident, ...prev.slice(0, 4)]);
+          setTodayAlertsCount((prev) => prev + 1);
         }
       )
       .subscribe();
 
-    // Cameras වලට Realtime Listener (කැමරාවක් Add/Delete කළ විට Count එක හැදීමට)
     const cameraChannel = supabase
       .channel("live-dashboard-cameras")
       .on(
@@ -93,31 +111,34 @@ export default function Dashboard() {
 
   const criticalCount = incidents.filter((i) => i.anomaly_score >= 70).length;
 
+  // 🟢 System health එක active cameras සංඛ්‍යාව මත පදනම්ව වෙනස් වන සේ සැකසීම
+  const systemHealthValue = totalCamCount > 0 ? ((activeCamCount / totalCamCount) * 100).toFixed(1) + "%" : "100%";
+
   const stats = [
     {
       title: "Active Cameras",
-      value: `${activeCamCount} / ${totalCamCount || 5}`,
+      value: `${activeCamCount} / ${totalCamCount}`, // 🟢 ඩිෆෝල්ට් 5 අයින් කර ඇත
       icon: Camera,
       color: "text-sky-400",
       trend: `+${activeCamCount} online`,
     },
     {
       title: "Today's Alerts",
-      value: `${incidents.length}`,
+      value: `${todayAlertsCount}`,
       icon: ShieldAlert,
       color: "text-red-400",
       trend: `${criticalCount} critical`,
     },
     {
       title: "System Health",
-      value: "99.9%",
+      value: systemHealthValue, // 🟢 රියල්ටයිම් කැමරා තත්ත්වය මත පදනම් වේ
       icon: Activity,
       color: "text-emerald-400",
-      trend: "Optimal",
+      trend: activeCamCount > 0 ? "Optimal" : "Standby",
     },
     {
       title: "Storage Used",
-      value: `${(incidents.length * 15).toFixed(0)} MB`,
+      value: `${(todayAlertsCount * 12).toFixed(1)} MB`, // 🟢 ඇස්තමේන්තුගත ස්ටෝරේජ් භාවිතය නිවැරදි කර ඇත
       icon: Video,
       color: "text-amber-400",
       trend: "of 2 GB",
@@ -172,7 +193,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Gap එක හදන්න min-h-[520px] අයින් කරලා h-fit දැම්මා */}
         <div className="glass-panel relative flex h-fit flex-col overflow-hidden p-1.5 xl:col-span-2">
           <CameraGrid />
         </div>
@@ -225,7 +245,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <p className="text-xs text-zinc-300 mt-1">
-                      Camera {inc.camera_id} - Monitored Feed
+                      {inc.camera_name ? inc.camera_name : `Camera ${inc.camera_id}`} - Monitored Feed
                     </p>
                     <div className={`mt-2 inline-block border text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${
                       isCritical ? "bg-red-500/20 border-red-500/30 text-red-300" : "bg-amber-500/10 border-amber-500/20 text-amber-400/80"

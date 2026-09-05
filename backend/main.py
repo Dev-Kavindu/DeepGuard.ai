@@ -188,9 +188,30 @@ def main():
     from supabase import create_client
     
     supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-    response = supabase.table("cameras").select("*").eq("active", True).execute()
     
-    print(f"🚀 Starting DeepGuard AI for {len(response.data)} active cameras...")
+    # Database එකෙන් කැමරා සියල්ල ලබාගැනීම
+    response = supabase.table("cameras").select("*").execute()
     
-    for cam in response.data:
-        process_camera_feed.spawn(cam["id"], cam["name"], cam["url"], cam["threshold"])
+    # Active කැමරා පමණක් පෙරීම (status === 'active' හෝ active === True)
+    active_cams = [
+        cam for cam in response.data 
+        if cam.get("status") == "active" or cam.get("active") is True or cam.get("status") is None
+    ]
+    
+    print(f"🚀 Starting DeepGuard AI for {len(active_cams)} active cameras...")
+    
+    if len(active_cams) == 0:
+        print("⚠️ No active cameras found in Database!")
+        return
+        
+    for cam in active_cams:
+        # අලුත් Database columns වලට ගැලපෙන පරිදි Data ලබාගැනීම
+        video_url = cam.get("stream_url") or cam.get("url")
+        threshold = cam.get("sensitivity") or cam.get("threshold") or 50.0
+        
+        if video_url:
+            print(f"➡️ Spawning GPU AI Worker for CAM {cam['id']}: {cam['name']}...")
+            # Cloud එකේ GPU එකක් වෙන් කර වීඩියෝව process කිරීමට යැවීම
+            process_camera_feed.spawn(cam["id"], cam["name"], video_url, threshold)
+        else:
+            print(f"⚠️ CAM {cam['id']} has no video stream URL. Skipping.")
