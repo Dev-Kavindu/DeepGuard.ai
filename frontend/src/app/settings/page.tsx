@@ -44,12 +44,18 @@ export default function SettingsPage() {
 
     setIsUploading(true);
     setUploadStatus("Uploading to Supabase...");
-    const fileExt = file.name.split(".").pop();
-    const fileName = `test-cam-${Date.now()}.${fileExt}`;
+    
+    // File name එක clean කර ගැනීම (spaces / symbols අයින් කර standard mp4 path එකක් හැදීම)
+    const sanitizedOriginalName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+    const filePath = `test-cam-${Date.now()}-${sanitizedOriginalName}`;
 
     const { error: uploadError } = await supabase.storage
       .from("incident_vault")
-      .upload(fileName, file);
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type || "video/mp4",
+      });
 
     if (uploadError) {
       alert(`Upload Failed: ${uploadError.message}`);
@@ -60,7 +66,7 @@ export default function SettingsPage() {
 
     const { data: publicUrlData } = supabase.storage
       .from("incident_vault")
-      .getPublicUrl(fileName);
+      .getPublicUrl(filePath);
 
     if (publicUrlData?.publicUrl) {
       setNewCam((prev) => ({ ...prev, url: publicUrlData.publicUrl }));
@@ -92,7 +98,9 @@ export default function SettingsPage() {
       setNewCam({ name: "", url: "", threshold: 50 });
       setUploadStatus("");
     } else {
-      alert(`Error adding camera: ${error?.message || "Unknown database error"}`);
+      alert(
+        `Error adding camera: ${error?.message || "Unknown database error"}`,
+      );
       console.error(error);
     }
     setIsSaving(false);
@@ -112,7 +120,9 @@ export default function SettingsPage() {
 
   const handleThresholdChange = async (id: number, newThreshold: number) => {
     setCameras(
-      cameras.map((c) => (c.id === id ? { ...c, sensitivity: newThreshold } : c)),
+      cameras.map((c) =>
+        c.id === id ? { ...c, sensitivity: newThreshold } : c,
+      ),
     );
     await supabase
       .from("cameras")
@@ -188,7 +198,7 @@ export default function SettingsPage() {
                     <div>
                       <h3 className="font-semibold text-lg">{cam.name}</h3>
                       <p
-                        className="text-xs text-zinc-500 font-mono mt-1 w-64 truncate"
+                        className="mt-1 max-w-[200px] truncate font-mono text-xs text-zinc-500 sm:max-w-xs"
                         title={cam.stream_url}
                       >
                         {cam.stream_url}
@@ -289,7 +299,7 @@ export default function SettingsPage() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+          <div className="relative max-h-[90vh] w-[92vw] max-w-lg overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl sm:p-6">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -340,7 +350,7 @@ export default function SettingsPage() {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-sm font-mono text-white focus:outline-none focus:border-blue-500 smooth-transition mb-2"
                 />
 
-                <div className="flex items-center gap-3 p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-lg border-dashed">
+                <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-zinc-800/50 bg-zinc-950/50 p-3 sm:flex-row sm:items-center">
                   <input
                     type="file"
                     accept="video/mp4"
@@ -393,11 +403,11 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium smooth-transition"
+                  className="w-full rounded-lg bg-zinc-800 py-2 text-sm font-medium smooth-transition hover:bg-zinc-700 sm:w-auto sm:px-5"
                 >
                   Cancel
                 </button>
@@ -407,7 +417,7 @@ export default function SettingsPage() {
                   disabled={
                     !newCam.name || !newCam.url || isSaving || isUploading
                   }
-                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium smooth-transition flex justify-center items-center"
+                  className="flex w-full items-center justify-center rounded-lg bg-blue-600 py-2 text-sm font-medium smooth-transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5"
                 >
                   {isSaving ? (
                     <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>

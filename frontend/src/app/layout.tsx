@@ -14,9 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#09090b] text-white">
+      <body className="min-h-screen overflow-x-hidden bg-[#09090b] text-white">
         <Sidebar />
-        <main className="min-h-screen px-4 pb-24 pt-6 sm:px-6 md:ml-72 md:px-8 md:pb-8 lg:px-10">
+        <main className="min-h-screen overflow-x-hidden px-4 pb-24 pt-20 sm:px-6 md:ml-72 md:px-8 md:pb-8 md:pt-6 lg:px-10">
           <div className="mx-auto max-w-[1600px]">{children}</div>
         </main>
       </body>

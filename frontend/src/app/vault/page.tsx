@@ -274,7 +274,7 @@ export default function VaultPage() {
       {/* Video Player Modal */}
       {selectedVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <div className="relative max-h-[90vh] w-[92vw] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/80 p-4">
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Play size={18} className="text-blue-500" /> Evidence Playback

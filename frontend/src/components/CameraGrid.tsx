@@ -84,7 +84,7 @@ export default function CameraGrid() {
   }, []);
 
   return (
-    <div className="relative z-20 grid h-full w-full grid-cols-1 gap-4 p-3 sm:p-4 md:grid-cols-2">
+    <div className="relative z-20 grid h-full w-full grid-cols-1 gap-4 p-3 sm:p-4 md:grid-cols-2 xl:grid-cols-3">
       {isLoading ? (
         <div className="col-span-full flex min-h-[360px] flex-col items-center justify-center text-zinc-500">
           <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-400/10">
