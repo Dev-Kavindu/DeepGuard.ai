@@ -19,6 +19,9 @@ export default function CameraGrid() {
       if (data) {
         const formattedCameras = data.map((cam) => ({
           ...cam,
+          // cam.status === 'active' හෝ boolean active දෙකම handle කිරීම
+          isActive: cam.status === "active" || cam.active === true || cam.status === undefined,
+          videoUrl: cam.stream_url || cam.url || "",
           isAlert: false,
         }));
         setCameras(formattedCameras);
@@ -121,23 +124,24 @@ export default function CameraGrid() {
             key={cam.id}
             className={`group relative flex aspect-video flex-col justify-between overflow-hidden rounded-xl border bg-zinc-950 smooth-transition
               ${cam.isAlert ? "border-red-500 glow-alert" : "border-zinc-800/80 hover:border-zinc-600"}
-              ${!cam.active ? "opacity-60 grayscale" : ""}
+              ${!cam.isActive ? "opacity-60 grayscale" : ""}
             `}
           >
             {/* Live Video Player or Placeholder */}
             <div className="absolute inset-0 bg-black flex items-center justify-center overflow-hidden">
-              {cam.active ? (
-                cam.url &&
-                (cam.url.startsWith("http://") ||
-                  cam.url.startsWith("https://")) ? (
+              {cam.isActive ? (
+                cam.videoUrl &&
+                (cam.videoUrl.startsWith("http://") ||
+                  cam.videoUrl.startsWith("https://")) ? (
                   // HTTP/HTTPS MP4 Test Videos ධාවනය කිරීම
                   <video
-                    src={cam.url}
+                    src={cam.videoUrl}
                     autoPlay
                     muted
                     loop
                     playsInline
-                    className="w-full h-full object-cover opacity-80"
+                    crossOrigin="anonymous"
+                    className="w-full h-full object-cover opacity-90"
                   />
                 ) : (
                   // RTSP Streams සඳහා Placeholder (Modal Backend එකෙන් පමණක් කියවයි)
@@ -175,14 +179,14 @@ export default function CameraGrid() {
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
-                  {cam.active ? (
+                  {cam.isActive ? (
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 border border-green-500/20 rounded-full backdrop-blur-sm">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                       </span>
                       <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">
-                        Live
+                        {cam.videoUrl && (cam.videoUrl.startsWith("http://") || cam.videoUrl.startsWith("https://")) ? "TEST MP4" : "LIVE RTSP"}
                       </span>
                     </div>
                   ) : (
