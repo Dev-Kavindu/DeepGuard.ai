@@ -230,7 +230,8 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     clip_name = f"evidence_cam{camera_id}_{int(time.time())}.mp4"
                     clip_path = f"/tmp/{clip_name}"
                     
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    # 🟢 බ්‍රවුසරයේ වීඩියෝ ප්ලේ වීම සඳහා avc1 codec එක භාවිත කිරීම
+                    fourcc = cv2.VideoWriter_fourcc(*'avc1')
                     out = cv2.VideoWriter(clip_path, fourcc, fps, (width, height))
                     
                     for f in raw_buffer:
@@ -259,7 +260,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
 
                     supabase.table("incidents").insert({
                         "camera_id": camera_id,
-                        "camera_name": camera_name,  # <--- මෙමඟින් කැමරාව මකා දැමුවද පරණ නම සදාකාලිකව සුරක්ෂිත වේ
+                        "camera_name": camera_name,  
                         "predicted_class": predicted_class,
                         "anomaly_score": float(anomaly_score),
                         "video_clip_url": public_url,
@@ -269,7 +270,8 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     
                     print(f"💾 Incident saved successfully to Supabase: {clip_name}")
                     
-                    cooldown_frames = int(fps * 5)
+                    # 🟢 Vault එකට තත්පර 30කට වරක් පමණක් මැසේජ්/ඇට් වැටීමට cooldown එක තත්පර 30ට සැකසීම
+                    cooldown_frames = int(fps * 30)
                     raw_buffer.clear()
 
     cap.release()
