@@ -84,7 +84,6 @@ export default function CameraGrid() {
   }, []);
 
   return (
-    // මෙහි h-full ඉවත් කර content-start එකතු කර ඇත
     <div className="relative z-20 grid w-full content-start grid-cols-1 gap-4 p-3 sm:p-4 md:grid-cols-2 xl:grid-cols-3">
       {isLoading ? (
         <div className="col-span-full flex min-h-[360px] flex-col items-center justify-center text-zinc-500">
@@ -107,7 +106,7 @@ export default function CameraGrid() {
           <span className="mt-1 text-xs text-zinc-600">Add a camera in Settings to begin monitoring.</span>
         </div>
       ) : (
-        cameras.map((cam) => (
+        cameras.map((cam, index) => (
           <div
             key={cam.id}
             className={`group relative flex aspect-video flex-col justify-between overflow-hidden rounded-xl border bg-zinc-950 smooth-transition
@@ -145,8 +144,9 @@ export default function CameraGrid() {
 
             <div className="absolute top-0 z-10 flex w-full items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-3">
               <div className="flex items-center gap-2">
+                {/* Index + 1 මඟින් කැමරා අංක පිළිවෙළට CAM 1, CAM 2 ලෙස ලබා දීම */}
                 <span className="rounded border border-white/10 bg-black/60 px-2 py-1 font-mono text-[10px] font-bold text-white backdrop-blur-md">
-                  CAM {cam.id}
+                  CAM {index + 1}
                 </span>
                 <span className="max-w-[10rem] truncate text-sm font-medium text-zinc-200 shadow-black drop-shadow-lg">
                   {cam.name}
