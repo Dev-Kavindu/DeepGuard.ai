@@ -2,6 +2,7 @@ import modal
 import os
 import time
 import datetime
+import subprocess
 from fastapi import Request
 
 app = modal.App("ucf-crime-detection")
@@ -15,7 +16,7 @@ def download_models():
 
 image = (
     modal.Image.debian_slim(python_version="3.10")
-    .apt_install("libgl1-mesa-glx", "libglib2.0-0")
+    .apt_install("libgl1-mesa-glx", "libglib2.0-0", "ffmpeg")
     .pip_install(
         "torch", "torchvision", "opencv-python-headless", "numpy",
         "huggingface_hub", "fastapi[standard]", "python-multipart", "supabase"
@@ -139,7 +140,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
     raw_buffer = []
     frame_count = 0
     cooldown_frames = 0
-    last_status_check = time.time()  # වෙලාවෙන් check කිරීමට variable එකක්
+    last_status_check = time.time()
 
     print(f"🎬 Processing Stream... FPS: {fps:.1f} | Resolution: {width}x{height} | Threshold: {threshold}%")
 
@@ -228,11 +229,12 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     print(f"🚨 ANOMALY DETECTED: {predicted_class} | Score: {anomaly_score:.2f}% | Cam: {camera_id}")
                     
                     clip_name = f"evidence_cam{camera_id}_{int(time.time())}.mp4"
+                    raw_clip_path = f"/tmp/raw_{clip_name}"
                     clip_path = f"/tmp/{clip_name}"
                     
-                    # 🟢 බ්‍රවුසරයේ වීඩියෝ ප්ලේ වීම සඳහා avc1 codec එක භාවිත කිරීම
-                    fourcc = cv2.VideoWriter_fourcc(*'avc1')
-                    out = cv2.VideoWriter(clip_path, fourcc, fps, (width, height))
+                    # 1. OpenCV එකේ ස්ථාවරව වැඩ කරන mp4v මඟින් ලිවීම
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(raw_clip_path, fourcc, fps, (width, height))
                     
                     for f in raw_buffer:
                         watermarked_frame = f.copy()
@@ -246,6 +248,16 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                         out.write(watermarked_frame)
                     out.release()
                     
+                    # 2. බ්‍රවුසරයේ ප්ලේ වීම සඳහා ffmpeg මඟින් browser-safe H.264 බවට පත් කිරීම
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", raw_clip_path, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast", clip_path],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    
+                    if os.path.exists(raw_clip_path):
+                        os.remove(raw_clip_path)
+                    
                     with open(clip_path, "rb") as vid_file:
                         supabase.storage.from_("incident_vault").upload(
                             clip_name,
@@ -253,6 +265,9 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                             {"content-type": "video/mp4"},
                         )
                     public_url = supabase.storage.from_("incident_vault").get_public_url(clip_name)
+                    
+                    if os.path.exists(clip_path):
+                        os.remove(clip_path)
                     
                     # 🟢 Sri Lanka Standard Time (UTC+5:30) සහ camera_name දත්ත ගබඩාවට යැවීම
                     sri_lanka_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
@@ -270,7 +285,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     
                     print(f"💾 Incident saved successfully to Supabase: {clip_name}")
                     
-                    # 🟢 Vault එකට තත්පර 30කට වරක් පමණක් මැසේජ්/ඇට් වැටීමට cooldown එක තත්පර 30ට සැකසීම
+                    # 🟢 Cooldown තත්පර 30
                     cooldown_frames = int(fps * 30)
                     raw_buffer.clear()
 
