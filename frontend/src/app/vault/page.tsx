@@ -11,17 +11,21 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function VaultPage() {
+function VaultContent() {
+  const searchParams = useSearchParams();
+  const playParam = searchParams.get("play");
+
   const [incidents, setIncidents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null); // Custom Delete Popup
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   const fetchIncidents = useCallback(async () => {
     const { data, error } = await supabase
@@ -29,10 +33,19 @@ export default function VaultPage() {
       .select(`*, cameras ( name )`)
       .order("created_at", { ascending: false });
 
-    if (data) setIncidents(data);
+    if (data) {
+      setIncidents(data);
+      // Dashboard එකෙන් URL එක හරහා incident ID එකක් ආවොත් ඒකෙ වීඩියෝ player එක auto-open කිරීම
+      if (playParam) {
+        const target = data.find((i: any) => i.id === Number(playParam));
+        if (target && target.video_clip_url) {
+          setSelectedVideo(target.video_clip_url);
+        }
+      }
+    }
     if (error) setError(error.message);
     setIsLoading(false);
-  }, []);
+  }, [playParam]);
 
   useEffect(() => {
     fetchIncidents();
@@ -135,7 +148,12 @@ export default function VaultPage() {
                 </tr>
               ) : (
                 filteredIncidents.map((incident) => (
-                  <tr key={incident.id} className={`hover:bg-zinc-800/20 smooth-transition ${incident.is_false_alarm ? "opacity-50 grayscale" : ""}`}>
+                  <tr
+                    key={incident.id}
+                    className={`hover:bg-zinc-800/20 smooth-transition ${
+                      incident.is_false_alarm ? "opacity-50 grayscale" : ""
+                    } ${playParam && Number(playParam) === incident.id ? "bg-blue-500/15 border-l-2 border-blue-400" : ""}`}
+                  >
                     <td className="px-6 py-4 font-mono text-zinc-300">
                       INC-{incident.id.toString().padStart(4, "0")}
                     </td>
@@ -251,5 +269,13 @@ export default function VaultPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function VaultPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-zinc-500 text-sm">Loading Vault...</div>}>
+      <VaultContent />
+    </Suspense>
   );
 }

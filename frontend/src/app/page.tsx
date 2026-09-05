@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowUpRight,
@@ -22,6 +23,7 @@ interface Incident {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [activeCamCount, setActiveCamCount] = useState<number>(0);
   const [totalCamCount, setTotalCamCount] = useState<number>(0);
@@ -186,7 +188,14 @@ export default function Dashboard() {
                 Recent Detections
               </h2>
             </div>
-            <ArrowUpRight size={17} className="text-zinc-600" />
+            <button
+              type="button"
+              onClick={() => router.push("/vault")}
+              className="text-zinc-500 hover:text-white smooth-transition"
+              title="View all in Incident Vault"
+            >
+              <ArrowUpRight size={17} />
+            </button>
           </div>
 
           <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
@@ -200,10 +209,11 @@ export default function Dashboard() {
                 return (
                   <div
                     key={inc.id}
-                    className={`cursor-pointer rounded-xl border p-4 smooth-transition ${
+                    onClick={() => router.push(`/vault?play=${inc.id}`)}
+                    className={`cursor-pointer rounded-xl border p-4 smooth-transition hover:scale-[1.01] ${
                       isCritical
-                        ? "border-red-500/20 bg-red-500/10 glow-alert"
-                        : "border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800"
+                        ? "border-red-500/20 bg-red-500/10 glow-alert hover:border-red-500/40"
+                        : "border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600"
                     }`}
                   >
                     <div className="flex justify-between items-start">
