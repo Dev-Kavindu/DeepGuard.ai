@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  reactCompiler: true,
+  // reactCompiler තාවකාලිකව ඉවත් කරන්න
+  trailingSlash: false,
 };
 
 export default nextConfig;
