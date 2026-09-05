@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
   const [saved, setSaved] = useState(false);
 
   const fetchCameras = useCallback(async () => {
@@ -42,16 +43,17 @@ export default function SettingsPage() {
     if (!file) return;
 
     setIsUploading(true);
+    setUploadStatus("Uploading to Supabase...");
     const fileExt = file.name.split(".").pop();
     const fileName = `test-cam-${Date.now()}.${fileExt}`;
 
-    // ඔයාගේ 'incident_vault' bucket එකට upload කිරීම
-    const { error } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("incident_vault")
       .upload(fileName, file);
 
-    if (error) {
-      setError(`Video upload failed: ${error.message}`);
+    if (uploadError) {
+      alert(`Upload Failed: ${uploadError.message}`);
+      setUploadStatus("Upload failed");
       setIsUploading(false);
       return;
     }
@@ -60,7 +62,10 @@ export default function SettingsPage() {
       .from("incident_vault")
       .getPublicUrl(fileName);
 
-    setNewCam({ ...newCam, url: publicUrlData.publicUrl });
+    if (publicUrlData?.publicUrl) {
+      setNewCam((prev) => ({ ...prev, url: publicUrlData.publicUrl }));
+      setUploadStatus("Uploaded successfully!");
+    }
     setIsUploading(false);
   };
 
@@ -68,14 +73,15 @@ export default function SettingsPage() {
     if (!newCam.name || !newCam.url) return;
     setIsSaving(true);
 
+    // Supabase table columns වලට ගැලපෙන පරිදි mapping සකස් කිරීම
     const { data, error } = await supabase
       .from("cameras")
       .insert([
         {
           name: newCam.name,
-          url: newCam.url,
-          threshold: newCam.threshold,
-          active: true,
+          stream_url: newCam.url,
+          sensitivity: newCam.threshold,
+          status: "active",
         },
       ])
       .select();
@@ -84,11 +90,9 @@ export default function SettingsPage() {
       setCameras([...cameras, data[0]]);
       setIsModalOpen(false);
       setNewCam({ name: "", url: "", threshold: 50 });
+      setUploadStatus("");
     } else {
-      setError(
-        "Error adding camera: " +
-          (error?.message || "Please verify the camera details."),
-      );
+      alert(`Error adding camera: ${error?.message || "Unknown database error"}`);
       console.error(error);
     }
     setIsSaving(false);
@@ -108,11 +112,11 @@ export default function SettingsPage() {
 
   const handleThresholdChange = async (id: number, newThreshold: number) => {
     setCameras(
-      cameras.map((c) => (c.id === id ? { ...c, threshold: newThreshold } : c)),
+      cameras.map((c) => (c.id === id ? { ...c, sensitivity: newThreshold } : c)),
     );
     await supabase
       .from("cameras")
-      .update({ threshold: newThreshold })
+      .update({ sensitivity: newThreshold })
       .eq("id", id);
   };
 
@@ -185,17 +189,17 @@ export default function SettingsPage() {
                       <h3 className="font-semibold text-lg">{cam.name}</h3>
                       <p
                         className="text-xs text-zinc-500 font-mono mt-1 w-64 truncate"
-                        title={cam.url}
+                        title={cam.stream_url}
                       >
-                        {cam.url}
+                        {cam.stream_url}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${cam.active ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-zinc-700 bg-zinc-800 text-zinc-400"}`}
+                      className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${cam.status === "active" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-zinc-700 bg-zinc-800 text-zinc-400"}`}
                     >
-                      {cam.active ? "Active" : "Disabled"}
+                      {cam.status || "Active"}
                     </span>
                     <button
                       type="button"
@@ -217,7 +221,7 @@ export default function SettingsPage() {
                       AI Anomaly Threshold (Sensitivity)
                     </label>
                     <span className="text-sm font-bold text-blue-400">
-                      {cam.threshold}%
+                      {cam.sensitivity}%
                     </span>
                   </div>
                   <input
@@ -225,7 +229,7 @@ export default function SettingsPage() {
                     min="10"
                     max="90"
                     id={`threshold-${cam.id}`}
-                    value={cam.threshold}
+                    value={cam.sensitivity || 50}
                     onChange={(e) =>
                       handleThresholdChange(
                         cam.id,
@@ -318,7 +322,6 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {/* URL Input and Upload Button */}
               <div>
                 <label
                   htmlFor="stream-url"
@@ -356,8 +359,8 @@ export default function SettingsPage() {
                     )}
                     {isUploading ? "Uploading..." : "Upload Test MP4"}
                   </label>
-                  <span className="text-xs text-zinc-500">
-                    Auto-generates the URL after upload.
+                  <span className="text-xs text-zinc-400">
+                    {uploadStatus || "Auto-generates the URL after upload."}
                   </span>
                 </div>
               </div>
