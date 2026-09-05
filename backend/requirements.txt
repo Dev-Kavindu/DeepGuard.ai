@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+requests
+apscheduler
+opencv-python-headless
+pillow
+modal
+torch
+torchvision
+huggingface_hub
+numpy
+python-multipart
+supabase
