@@ -1,4 +1,6 @@
 "use client";
+
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -8,22 +10,101 @@ import {
   Video,
 } from "lucide-react";
 import CameraGrid from "@/components/CameraGrid";
+import { supabase } from "@/lib/supabase";
+
+interface Incident {
+  id: number;
+  camera_id: number;
+  predicted_class: string;
+  anomaly_score: number;
+  video_clip_url: string;
+  created_at: string;
+}
 
 export default function Dashboard() {
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [activeCamCount, setActiveCamCount] = useState<number>(0);
+  const [totalCamCount, setTotalCamCount] = useState<number>(0);
+
+  const formatTimeAgo = (dateString: string) => {
+    const seconds = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
+    if (seconds < 60) return "Just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} mins ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  useEffect(() => {
+    const fetchCameraStats = async () => {
+      const { data } = await supabase.from("cameras").select("id, status, active");
+      if (data) {
+        setTotalCamCount(data.length);
+        const active = data.filter(
+          (c) => c.status === "active" || c.active === true || c.status === null
+        ).length;
+        setActiveCamCount(active);
+      }
+    };
+
+    const fetchRecentIncidents = async () => {
+      const { data } = await supabase
+        .from("incidents")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (data) setIncidents(data);
+    };
+
+    fetchCameraStats();
+    fetchRecentIncidents();
+
+    // Alerts වලට Realtime Listener
+    const incidentChannel = supabase
+      .channel("live-dashboard-incidents")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "incidents" },
+        (payload) => {
+          const newIncident = payload.new as Incident;
+          setIncidents((prev) => [newIncident, ...prev.slice(0, 9)]);
+        }
+      )
+      .subscribe();
+
+    // Cameras වලට Realtime Listener (කැමරාවක් Add/Delete කළ විට Count එක හැදීමට)
+    const cameraChannel = supabase
+      .channel("live-dashboard-cameras")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "cameras" },
+        () => fetchCameraStats()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(incidentChannel);
+      supabase.removeChannel(cameraChannel);
+    };
+  }, []);
+
+  const criticalCount = incidents.filter((i) => i.anomaly_score >= 70).length;
+
   const stats = [
     {
       title: "Active Cameras",
-      value: "5 / 5",
+      value: `${activeCamCount} / ${totalCamCount || 5}`,
       icon: Camera,
       color: "text-sky-400",
-      trend: "+1 online",
+      trend: `+${activeCamCount} online`,
     },
     {
       title: "Today's Alerts",
-      value: "12",
+      value: `${incidents.length}`,
       icon: ShieldAlert,
       color: "text-red-400",
-      trend: "3 critical",
+      trend: `${criticalCount} critical`,
     },
     {
       title: "System Health",
@@ -34,7 +115,7 @@ export default function Dashboard() {
     },
     {
       title: "Storage Used",
-      value: "450 MB",
+      value: `${(incidents.length * 15).toFixed(0)} MB`,
       icon: Video,
       color: "text-amber-400",
       trend: "of 2 GB",
@@ -43,7 +124,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-7">
-      {/* Header Section */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
@@ -67,7 +147,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Top Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
           <div
@@ -82,9 +161,7 @@ export default function Dashboard() {
               <p className="mt-0.5 text-2xl font-bold tracking-tight">
                 {stat.value}
               </p>
-              <p
-                className={`mt-1 text-[10px] font-semibold uppercase tracking-wider ${stat.color}`}
-              >
+              <p className={`mt-1 text-[10px] font-semibold uppercase tracking-wider ${stat.color}`}>
                 {stat.trend}
               </p>
             </div>
@@ -92,14 +169,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Main Content: Camera Grid & Alerts Stream */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Camera Grid Area (Takes 2 Columns) */}
-        <div className="glass-panel relative flex min-h-[520px] flex-col overflow-hidden p-1.5 xl:col-span-2">
+        {/* Gap එක හදන්න min-h-[520px] අයින් කරලා h-fit දැම්මා */}
+        <div className="glass-panel relative flex h-fit flex-col overflow-hidden p-1.5 xl:col-span-2">
           <CameraGrid />
         </div>
 
-        {/* Live Alerts Sidebar */}
         <div className="glass-panel flex max-h-[600px] flex-col p-5">
           <div className="mb-4 flex items-start justify-between">
             <div>
@@ -115,59 +190,50 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-            {/* Alert Item - Critical */}
-            <div className="cursor-pointer rounded-xl border border-red-500/20 bg-red-500/10 p-4 glow-alert">
-              <div className="flex justify-between items-start">
-                <span className="text-red-400 font-bold text-sm">
-                  Suspicious Activity
-                </span>
-                <span className="text-xs text-zinc-400 bg-zinc-950 px-2 py-1 rounded-md">
-                  Just now
-                </span>
+            {incidents.length === 0 ? (
+              <div className="py-16 text-center text-xs text-zinc-500">
+                No active threats detected. Monitoring site live.
               </div>
-              <p className="text-xs text-zinc-300 mt-1">
-                Camera 2 - Main Cashier
-              </p>
-              <div className="mt-2 inline-block bg-red-500/20 border border-red-500/30 text-red-300 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded">
-                AI Tag: Possible Robbery
-              </div>
-              <div className="mt-3 w-full bg-zinc-900 rounded-full h-1.5">
-                <div
-                  className="bg-red-500 h-1.5 rounded-full"
-                  style={{ width: "92%" }}
-                ></div>
-              </div>
-            </div>
-
-            {/* Alert Item - Warning 1 */}
-            <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 hover:bg-zinc-800 smooth-transition cursor-pointer">
-              <div className="flex justify-between items-start">
-                <span className="text-amber-400 font-bold text-sm">
-                  Security Alert
-                </span>
-                <span className="text-xs text-zinc-500">10 mins ago</span>
-              </div>
-              <p className="text-xs text-zinc-300 mt-1">
-                Camera 1 - Front Entrance
-              </p>
-              <div className="mt-2 inline-block bg-amber-500/10 border border-amber-500/20 text-amber-400/80 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded">
-                AI Tag: Possible Fighting
-              </div>
-            </div>
-
-            {/* Alert Item - Warning 2 */}
-            <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 hover:bg-zinc-800 smooth-transition cursor-pointer">
-              <div className="flex justify-between items-start">
-                <span className="text-amber-400 font-bold text-sm">
-                  Security Alert
-                </span>
-                <span className="text-xs text-zinc-500">1 hour ago</span>
-              </div>
-              <p className="text-xs text-zinc-300 mt-1">Camera 3 - Aisle 4</p>
-              <div className="mt-2 inline-block bg-amber-500/10 border border-amber-500/20 text-amber-400/80 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded">
-                AI Tag: Possible Shoplifting
-              </div>
-            </div>
+            ) : (
+              incidents.map((inc) => {
+                const isCritical = inc.anomaly_score >= 70;
+                return (
+                  <div
+                    key={inc.id}
+                    className={`cursor-pointer rounded-xl border p-4 smooth-transition ${
+                      isCritical
+                        ? "border-red-500/20 bg-red-500/10 glow-alert"
+                        : "border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className={`font-bold text-sm ${isCritical ? "text-red-400" : "text-amber-400"}`}>
+                        {isCritical ? "Suspicious Activity" : "Security Alert"}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-md ${isCritical ? "text-zinc-400 bg-zinc-950" : "text-zinc-500 bg-zinc-900"}`}>
+                        {formatTimeAgo(inc.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-300 mt-1">
+                      Camera {inc.camera_id} - Monitored Feed
+                    </p>
+                    <div className={`mt-2 inline-block border text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${
+                      isCritical ? "bg-red-500/20 border-red-500/30 text-red-300" : "bg-amber-500/10 border-amber-500/20 text-amber-400/80"
+                    }`}>
+                      AI Tag: Possible {inc.predicted_class}
+                    </div>
+                    {isCritical && (
+                      <div className="mt-3 w-full bg-zinc-900 rounded-full h-1.5">
+                        <div
+                          className="bg-red-500 h-1.5 rounded-full"
+                          style={{ width: `${Math.min(inc.anomaly_score, 100)}%` }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
