@@ -1,61 +1,124 @@
 
 # DeepGuard.ai
 
-DeepGuard.ai is a real-time video intelligence platform for security operations teams. It combines a dark-glass operations console, Supabase event storage and realtime delivery, a FastAPI inference service, and Modal GPU workers to detect anomalous activity in camera footage and preserve reviewable evidence.
+> **Cloud-Native Intelligent CCTV Anomaly Detection Platform**
+>
+> Edge-to-cloud real-time surveillance intelligence powered by Next.js, Supabase, and serverless GPU inference on Modal.
 
-The repository is organized as a production-oriented monorepo: `frontend/` contains the operator console and `backend/` contains the local API and GPU processing paths. Every backend writer uses the same incident contract, so a detection is stored once, delivered through Supabase Realtime, and immediately visible to operators.
+[![Next.js App Router](https://img.shields.io/badge/Next.js%20App%20Router-16.3.4-000000?logo=next.js)](https://nextjs.org/)
+[![Supabase Realtime](https://img.shields.io/badge/Supabase-Realtime-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/realtime)
+[![Modal GPU](https://img.shields.io/badge/Modal%20Labs-Serverless%20GPU-7C3AED)](https://modal.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![WebSockets](https://img.shields.io/badge/WebSockets-Supabase%20Pub%2FSub-111827)](https://supabase.com/docs/guides/realtime)
 
-## Product Surface
+DeepGuard.ai is a security operations console for live camera monitoring, anomaly detection, and evidence review. The monorepo combines a responsive Next.js operator interface, Supabase PostgreSQL and Realtime, FastAPI upload inference, and Modal GPU workers running PyTorch vision models.
 
-- **Live Command Center**: responsive camera wall with stream placeholders, MP4 playback, live/offline state, anomaly highlighting, current timestamps, and recent detection context.
-- **Incident Vault**: searchable evidence register with anomaly scores, camera locations, date/time metadata, false-alarm feedback, playback, download, and deletion actions.
-- **Camera Configuration**: add RTSP or MP4 sources, upload test videos to Supabase Storage, tune per-camera sensitivity, and remove sources.
-- **Operations shell**: responsive desktop sidebar and mobile bottom navigation with consistent zinc glass surfaces, emerald health signals, and red critical-alert states.
-
-## Architecture
+## Executive Architecture
 
 ```text
-Camera / MP4 source
-	|
-	v
-FastAPI /analyze or Modal process_camera_feed
-	|
-	+--> ResNet50 feature extraction
-	+--> BiLSTM-MIL anomaly classification
-	|
-	+--> Supabase Storage: incident_vault
-	+--> Supabase tables: cameras, incidents
-			 |
-			 +--> Supabase Realtime INSERT
-				      |
-				      v
-			 Next.js App Router console
+  CCTV feeds / MP4 vault
+	  |
+	  v
+  Supabase cameras table and event stream
+	  |
+	  +---- Webhook / orchestration ----+
+	  |                                  |
+	  v                                  v
+  FastAPI upload inference       Modal serverless T4 GPU workers
+	  |                                  |
+	  +-------- PyTorch / ResNet50 / BiLSTM-MIL --------+
+							   |
+							   v
+			      Dynamic watermarking and evidence recording
+							   |
+							   v
+			      Supabase incidents + incident_vault storage
+							   |
+							   v
+			      Supabase Realtime WebSockets
+							   |
+							   v
+			      Live operator command center and Incident Vault
 ```
 
-### Frontend
+### Core Capabilities
 
-The frontend lives in `frontend/` and uses Next.js 16 App Router, React 19, Tailwind CSS 4, Lucide icons, and the Supabase JavaScript client. The browser uses the public Supabase URL and anon key only. It subscribes to new `incidents` inserts through the `live-incidents` channel and keeps database/storage operations in the existing client-side flows.
+- **Real-time stream monitoring:** RTSP-oriented camera registration, browser-playable MP4 feeds, live/offline states, and in-flight frame sampling for active AI cameras.
+- **Glassmorphic control plane:** Dark zinc surfaces, emerald operational signals, red critical alerts, responsive navigation, per-camera sensitivity controls, and bidirectional master AI/threshold overrides.
+- **Automated Incident Vault:** Watermarked evidence clips are uploaded to Supabase Storage and indexed in PostgreSQL for playback, download, false-alarm handling, and deletion workflows.
+- **Cost-aware distributed execution:** Passive cameras do not spawn GPU workers; AI-disabled workers terminate on state checks; debounced controls reduce mutation bursts during slider interaction.
+- **Operator synchronization:** Dashboard, camera grid, and vault subscribe to Supabase Realtime so camera and incident changes propagate without a browser refresh.
 
-### Backend
+## Technology Stack
 
-The backend lives in `backend/` and provides two inference paths:
+| Layer | Technologies | Responsibility |
+| --- | --- | --- |
+| Operator frontend | Next.js 16 App Router, React 19, TypeScript | Dashboard, camera grid, settings, and evidence workflows |
+| UI system | Tailwind CSS 4, Lucide React | Responsive dark-glass operations interface |
+| Data and realtime | Supabase PostgreSQL, Realtime Pub/Sub, Storage | Camera state, incident records, event delivery, evidence objects |
+| API inference | FastAPI, OpenCV, TorchVision | Multipart video analysis and asynchronous evidence processing |
+| GPU compute | Modal Labs, PyTorch, ResNet50, BiLSTM-MIL | Serverless T4 stream inference and webhook-driven workers |
+| Model artifacts | Hugging Face Hub | `Kavindu1124/ucf-crime-bilstm-mil` checkpoint distribution |
+| Deployment | Vercel, Modal | Frontend edge deployment and GPU inference workers |
 
-- `backend/app.py`: FastAPI `/analyze` endpoint for uploaded video files. It validates uploads, extracts sampled frame features, runs the anomaly model, and asynchronously watermarks/uploads alarm evidence.
-- `backend/main.py`: Modal GPU worker that reads active camera rows, processes streams continuously, uploads evidence, and inserts incidents that trigger the frontend realtime channel.
-- `backend/modal_app.py`: Modal class endpoint plus hourly retention job. The retention job removes normal detections after one hour and old incident evidence after seven days.
 
-The model uses ImageNet ResNet50 features followed by the `Kavindu1124/ucf-crime-bilstm-mil` BiLSTM-MIL checkpoint. Supported labels include abuse, arrest, arson, assault, burglary, explosion, fighting, robbery, shooting, shoplifting, stealing, vandalism, road accidents, and normal activity.
+## Dataset Acquisition & License Information
 
-## Requirements
+**Dataset Name:** UCF-Crime Dataset (Real-world Anomaly Detection in Surveillance Videos)  
+**Source:** [Kaggle - UCF Crimes](https://www.kaggle.com/datasets/bypktt/ucf-crimes) / Official CRCV Project Page  
+
+**Dataset Overview:**
+* The dataset contains approximately 128 hours of real-world CCTV surveillance video.
+* It includes 1,950 long and untrimmed videos covering 13 realistic anomaly categories (Abuse, Arrest, Arson, Assault, Burglary, Explosion, Fighting, Road Accident, Robbery, Shooting, Shoplifting, Stealing, Vandalism) and 1 Normal category.
+
+**Ethical Sourcing & License:**
+The dataset was acquired from public research repositories (Kaggle). It is utilized in this Capstone Project strictly for **educational, research, and non-commercial purposes**. The data involves real-world CCTV footage, and its use is limited to developing automated threat-detection intelligence without violating individual privacy for commercial gain.
+
+**Academic Citation:**
+This dataset was introduced by Waqas Sultani, Chen Chen, and Mubarak Shah at CVPR 2018. The foundational research paper is cited below:
+
+```bibtex
+@InProceedings{Sultani_2018_CVPR,
+author = {Sultani, Waqas and Chen, Chen and Shah, Mubarak},
+title = {Real-World Anomaly Detection in Surveillance Videos},
+booktitle = {The IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+month = {June},
+year = {2018}
+}
+```
+
+
+## Repository Layout
+
+```text
+.
+├── frontend/
+│   ├── src/app/page.tsx              # Live Command Center
+│   ├── src/app/vault/page.tsx        # Incident Vault
+│   ├── src/app/settings/page.tsx     # Camera and AI controls
+│   ├── src/components/CameraGrid.tsx # Live camera wall
+│   └── src/lib/supabase.ts           # Browser Supabase client
+├── backend/
+│   ├── app.py                        # FastAPI /analyze endpoint
+│   ├── main.py                       # Modal stream worker entrypoint
+│   ├── modal_app.py                  # Modal webhook, worker, and cleanup job
+│   ├── requirements.txt
+│   └── pyproject.toml
+├── evaluation_report.md
+└── README.md
+```
+
+## Getting Started
+
+### Prerequisites
 
 - Node.js 20+ and npm
-- Python 3.14+ (the checked-in `backend/.venv` is the workspace interpreter)
-- A Supabase project with database realtime enabled for `incidents`
-- A Supabase Storage bucket named `incident_vault`
-- Modal account and CLI for GPU stream processing
-- NVIDIA/CUDA is optional for local FastAPI inference; CPU fallback is supported but slower
+- Python 3.10+ for the Modal image; use the project virtual environment for local backend work
+- Supabase project with `cameras` and `incidents` tables, Realtime enabled, and an `incident_vault` bucket
+- Modal account and CLI for serverless GPU deployment
 
-## Configuration
+### Frontend Environment
 
 Create `frontend/.env.local`:
 
@@ -64,7 +127,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
-For local backend execution, provide a `.env` file or process environment values:
+The browser must receive only the public Supabase URL and anon key. Never expose a service-role key in `NEXT_PUBLIC_*` variables.
+
+### Backend and Modal Environment
+
+For local FastAPI execution:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
@@ -72,29 +139,18 @@ SUPABASE_KEY=your-server-side-key
 CORS_ORIGINS=http://localhost:3000
 ```
 
-Modal uses a secret named `supabase-secrets` containing `SUPABASE_URL` and `SUPABASE_KEY`. The backend also accepts the frontend variable names as a compatibility fallback, but server deployments should use server-side names and a protected runtime secret store.
+Configure the Modal secret named `supabase-secrets` with `SUPABASE_URL` and `SUPABASE_KEY`. A deployed webhook endpoint is represented by `MODAL_ENDPOINT_URL` for integrations that need to call the worker orchestration endpoint.
 
-Never commit `.env*`, service-role keys, model checkpoints, uploaded footage, or Supabase credentials.
+Optional local integration variables:
 
-## Supabase Data Contract
+```env
+MODAL_ENDPOINT_URL=https://your-modal-endpoint.modal.run
+SUPABASE_SERVICE_ROLE_KEY=server-side-only-value
+```
 
-The existing UI expects these fields:
+Do not commit any of these values.
 
-**`cameras`**
-
-`id`, `name`, `url`, `threshold`, `active`
-
-**`incidents`**
-
-`id`, `camera_id`, `anomaly_type`, `anomaly_score`, `video_url`, `is_false_alarm`, `created_at`
-
-The incident query joins `cameras ( name )`. Keep that relationship and enable Realtime for `incidents` so camera alarms appear immediately in the dashboard.
-
-The backend writes `anomaly_type` and `video_url`; older names such as `predicted_class` and `video_clip_url` are not part of the active contract.
-
-## Local Development
-
-### Frontend
+### Run the Frontend
 
 ```powershell
 cd frontend
@@ -104,14 +160,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Useful checks:
-
-```powershell
-npm run lint
-npm run build
-```
-
-### FastAPI service
+### Run the FastAPI Upload API
 
 ```powershell
 cd backend
@@ -121,54 +170,57 @@ pip install -r requirements.txt
 uvicorn app:app --reload --port 8000
 ```
 
-The API accepts multipart uploads at `POST /analyze` with `file`, optional `threshold`, and optional `camera_id` form fields. Model weights are downloaded from Hugging Face on first startup, so the first boot is expected to take longer.
+Send a multipart request to `POST /analyze` with `file`, optional `threshold`, and optional `camera_id`. The first startup downloads the ResNet50 and BiLSTM-MIL artifacts.
 
-To validate backend syntax without loading model weights:
-
-```powershell
-\.venv\Scripts\python.exe -m compileall app.py main.py modal_app.py
-```
-
-### Modal worker
-
-After configuring the `supabase-secrets` Modal secret:
+### Run or Deploy Modal Workers
 
 ```powershell
 cd backend
 modal run main.py
 ```
 
-The worker discovers active cameras from Supabase and spawns one GPU process per source.
+For the webhook and scheduled cleanup application:
 
-`modal_app.py` exposes the class-based HTTP endpoint and scheduled retention job. Deploy the path that matches the intended Modal workflow; do not run both stream orchestrators for the same camera unless duplicate processing is intentional.
-
-## Production Notes
-
-- Restrict Supabase Row Level Security and Storage policies before exposing the console to operators.
-- Set `CORS_ORIGINS` to the exact deployed frontend origin(s); the local default is `http://localhost:3000`.
-- Put authentication and role-based authorization in front of camera administration and destructive vault actions.
-- Use signed/private Storage URLs when evidence should not be publicly addressable.
-- Add structured logging, health checks, retry/backoff for stream failures, and monitoring for model-load latency.
-- Keep GPU workers isolated from the public API and rotate Modal/Supabase secrets regularly.
-
-## Repository Layout
-
-```text
-.
-├── frontend/              # Next.js App Router operations console
-│   ├── src/app/            # Dashboard, Vault, Settings, global shell
-│   ├── src/components/     # Sidebar and live camera grid
-│   └── src/lib/            # Supabase browser client
-├── backend/                # FastAPI and Modal inference paths
-│   ├── app.py               # Local FastAPI upload inference
-│   ├── main.py              # Modal stream worker
-│   ├── modal_app.py         # Modal HTTP endpoint and retention job
-│   ├── requirements.txt     # pip-compatible dependencies
-│   └── pyproject.toml       # project metadata and dependencies
-├── README.md
-└── .gitignore
+```powershell
+modal deploy modal_app.py
 ```
+
+Deploy one stream orchestration path per camera. Running both `main.py` and `modal_app.py` for the same sources can create duplicate detections.
+
+### Verification
+
+```powershell
+cd frontend
+npm run build
+
+cd ..\backend
+\.venv\Scripts\python.exe -m compileall app.py main.py modal_app.py
+```
+
+## Supabase Contract
+
+The active frontend and backend paths use these fields:
+
+| Table | Important columns |
+| --- | --- |
+| `cameras` | `id`, `name`, `stream_url` or `url`, `status`, `active`, `ai_enabled`, `sensitivity` or `threshold` |
+| `incidents` | `id`, `camera_id`, `camera_name`, `predicted_class` or `anomaly_type`, `anomaly_score`, `video_clip_url` or `video_url`, `is_false_alarm`, `created_at` |
+| Storage | `incident_vault` bucket for evidence clips |
+
+Enable Realtime for `cameras` and `incidents`. Configure Row Level Security and Storage policies before exposing this console to operators. Use private evidence objects and signed URLs for production deployments.
+
+## Operational Notes
+
+- AI processing is opt-in at the worker gate: cameras with `ai_enabled = false` remain passive feeds and should not consume GPU capacity.
+- Workers periodically re-check camera existence, operational status, and AI enablement so deactivation can terminate processing without restarting the platform.
+- Evidence timestamps are captured at anomaly confirmation and reused for the burned watermark and incident record.
+- `modal_app.py` includes an hourly cleanup task for normal detections and seven-day incident retention.
+- Add authentication, RBAC, audit logging, health checks, retry/backoff, webhook idempotency, and cost telemetry before a public or multi-tenant launch.
+
+## Project Status
+
+DeepGuard.ai is a strong pilot-ready foundation for controlled environments. It has the core operator workflow, realtime incident delivery, serverless GPU integration, and evidence lifecycle primitives. Production rollout should be gated on the security, observability, multi-tenant isolation, and webhook reliability work described in [evaluation_report.md](evaluation_report.md).
 
 ## License
 
-This repository is an internal/prototype production foundation. Add the project license and third-party model usage terms before external distribution.
+This repository is an internal/prototype production foundation. Add a project license and verify third-party model and dataset terms before external distribution.
