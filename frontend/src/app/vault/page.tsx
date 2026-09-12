@@ -55,28 +55,17 @@ function VaultContent() {
       .channel("live-vault-incidents")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "incidents" },
+        { event: "*", schema: "public", table: "incidents" },
         (payload) => {
-          const newIncident = payload.new;
-          setIncidents((prev) => [newIncident, ...prev]);
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "incidents" },
-        (payload) => {
-          const updated = payload.new;
-          setIncidents((prev) =>
-            prev.map((inc) => (inc.id === updated.id ? updated : inc))
-          );
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "incidents" },
-        (payload) => {
-          const deleted = payload.old;
-          setIncidents((prev) => prev.filter((inc) => inc.id !== deleted.id));
+          if (payload.eventType === "INSERT") {
+            setIncidents((prev) => [payload.new, ...prev]);
+          } else if (payload.eventType === "UPDATE") {
+            setIncidents((prev) =>
+              prev.map((inc) => (inc.id === payload.new.id ? payload.new : inc))
+            );
+          } else if (payload.eventType === "DELETE") {
+            setIncidents((prev) => prev.filter((inc) => inc.id !== payload.old.id));
+          }
         }
       )
       .subscribe();

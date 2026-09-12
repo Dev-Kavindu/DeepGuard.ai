@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, AlertTriangle, BrainCircuit, Video, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, Video, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -161,15 +161,19 @@ export default function CameraGrid() {
               ) : (
                 <div className="flex items-center gap-1">
                   {cam.isActive ? (
-                    <div className={`flex items-center gap-1.5 rounded-full border px-2 py-1 backdrop-blur-sm ${cam.aiEnabled ? "border-green-500/20 bg-green-500/10" : "border-sky-500/20 bg-sky-500/10"}`}>
-                      <span className="relative flex h-2 w-2">
-                        <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${cam.aiEnabled ? "bg-green-400" : "bg-sky-400"}`}></span>
-                        <span className={`relative inline-flex h-2 w-2 rounded-full ${cam.aiEnabled ? "bg-green-500" : "bg-sky-500"}`}></span>
-                      </span>
-                      <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${cam.aiEnabled ? "text-green-400" : "text-sky-400"}`}>
-                        {cam.aiEnabled ? <BrainCircuit size={11} /> : <Video size={11} />}
-                        {cam.aiEnabled ? "AI MONITORING" : "PASSIVE CCTV"}
-                      </span>
+                    <div
+                      className={`flex items-center rounded-full border p-1.5 backdrop-blur-sm ${cam.aiEnabled ? "border-green-500/20 bg-green-500/10" : "border-sky-500/20 bg-sky-500/10"}`}
+                      title={cam.aiEnabled ? "AI Anomaly Monitoring Active" : "Passive CCTV Monitoring"}
+                      aria-label={cam.aiEnabled ? "AI Anomaly Monitoring Active" : "Passive CCTV Monitoring"}
+                    >
+                      {cam.aiEnabled ? (
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                        </span>
+                      ) : (
+                        <Video size={12} className="text-sky-400" aria-hidden="true" />
+                      )}
                     </div>
                   ) : (
                     <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400">
