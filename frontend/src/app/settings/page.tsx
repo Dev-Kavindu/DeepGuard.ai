@@ -9,13 +9,16 @@ import {
   X,
   ShieldAlert
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 const GLOBAL_PREFERENCES_KEY = "deepguard-global-preferences";
 
 export default function SettingsPage() {
   const [cameras, setCameras] = useState<any[]>([]);
+  const allEnabled = useMemo(() => {
+    return cameras.length > 0 && cameras.every((camera) => camera.ai_enabled === true);
+  }, [cameras]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newCam, setNewCam] = useState({ name: "", url: "", threshold: 50, aiEnabled: true });
@@ -23,9 +26,10 @@ export default function SettingsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
-  const [globalAiEnabled, setGlobalAiEnabled] = useState(true);
   const [thresholdOverride, setThresholdOverride] = useState(false);
   const [globalThreshold, setGlobalThreshold] = useState(50);
+  const thresholdTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const globalThresholdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Custom delete modal state
   const [camToDelete, setCamToDelete] = useState<number | null>(null);
@@ -38,9 +42,6 @@ export default function SettingsPage() {
       if (storedPreferences) {
         try {
           const preferences = JSON.parse(storedPreferences);
-          if (typeof preferences.masterAiEnabled === "boolean") {
-            setGlobalAiEnabled(preferences.masterAiEnabled);
-          }
           if (typeof preferences.thresholdOverrideEnabled === "boolean") {
             setThresholdOverride(preferences.thresholdOverrideEnabled);
           }
@@ -49,10 +50,7 @@ export default function SettingsPage() {
           }
         } catch {
           localStorage.removeItem(GLOBAL_PREFERENCES_KEY);
-          setGlobalAiEnabled(data.length === 0 || !data.every((camera) => camera.ai_enabled === false));
         }
-      } else {
-        setGlobalAiEnabled(data.length === 0 || !data.every((camera) => camera.ai_enabled === false));
       }
     }
     if (error) setError(error.message);
@@ -61,6 +59,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchCameras();
+    return () => {
+      Object.values(thresholdTimers.current).forEach(clearTimeout);
+      if (globalThresholdTimer.current) clearTimeout(globalThresholdTimer.current);
+    };
   }, [fetchCameras]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,58 +121,91 @@ export default function SettingsPage() {
   };
 
   const handleThresholdChange = async (id: number, newThreshold: number) => {
-    setCameras(cameras.map((c) => (c.id === id ? { ...c, sensitivity: newThreshold } : c)));
+    setCameras((previousCameras) => previousCameras.map((c) => (c.id === id ? { ...c, sensitivity: newThreshold } : c)));
     setThresholdOverride(false);
+    if (globalThresholdTimer.current) {
+      clearTimeout(globalThresholdTimer.current);
+      globalThresholdTimer.current = null;
+    }
     localStorage.setItem(
       GLOBAL_PREFERENCES_KEY,
-      JSON.stringify({ masterAiEnabled: globalAiEnabled, thresholdOverrideEnabled: false, masterThreshold: globalThreshold })
+      JSON.stringify({ masterAiEnabled: cameras.length > 0 && cameras.every((camera) => camera.ai_enabled === true), thresholdOverrideEnabled: false, masterThreshold: globalThreshold })
     );
-    await supabase.from("cameras").update({ sensitivity: newThreshold }).eq("id", id);
+    if (thresholdTimers.current[id]) clearTimeout(thresholdTimers.current[id]);
+    thresholdTimers.current[id] = setTimeout(async () => {
+      await supabase.from("cameras").update({ sensitivity: newThreshold }).eq("id", id);
+      delete thresholdTimers.current[id];
+    }, 300);
   };
 
   const handleAiEnabledChange = async (id: number, aiEnabled: boolean) => {
-    const updatedCameras = cameras.map((c) => (c.id === id ? { ...c, ai_enabled: aiEnabled } : c));
-    const allAiEnabled = updatedCameras.every((camera) => camera.ai_enabled !== false);
-    setCameras(updatedCameras);
-    setGlobalAiEnabled(allAiEnabled);
-    localStorage.setItem(
-      GLOBAL_PREFERENCES_KEY,
-      JSON.stringify({ masterAiEnabled: allAiEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: globalThreshold })
-    );
+    setCameras((previousCameras) => {
+      const updatedCameras = previousCameras.map((camera) => (camera.id === id ? { ...camera, ai_enabled: aiEnabled } : camera));
+      const nextAllEnabled = updatedCameras.length > 0 && updatedCameras.every((camera) => camera.ai_enabled === true);
+      localStorage.setItem(
+        GLOBAL_PREFERENCES_KEY,
+        JSON.stringify({ masterAiEnabled: nextAllEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: globalThreshold })
+      );
+      return updatedCameras;
+    });
     await supabase.from("cameras").update({ ai_enabled: aiEnabled }).eq("id", id);
   };
 
   const handleGlobalAiChange = async (aiEnabled: boolean) => {
-    setGlobalAiEnabled(aiEnabled);
+    if (aiEnabled === allEnabled || cameras.length === 0) return;
     localStorage.setItem(
       GLOBAL_PREFERENCES_KEY,
       JSON.stringify({ masterAiEnabled: aiEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: globalThreshold })
     );
-    setCameras(cameras.map((camera) => ({ ...camera, ai_enabled: aiEnabled })));
-    await supabase.from("cameras").update({ ai_enabled: aiEnabled }).not("id", "is", null);
+    const updatedCameras = cameras.map((camera) => ({ ...camera, ai_enabled: aiEnabled }));
+    setCameras(updatedCameras);
+    if (cameras.length > 0) {
+      const camIds = cameras.map((camera) => camera.id);
+      await supabase.from("cameras").update({ ai_enabled: aiEnabled }).in("id", camIds);
+    }
   };
 
   const handleGlobalThresholdChange = async (threshold: number) => {
+    if (threshold === globalThreshold) return;
+    Object.values(thresholdTimers.current).forEach(clearTimeout);
+    thresholdTimers.current = {};
     setGlobalThreshold(threshold);
     localStorage.setItem(
       GLOBAL_PREFERENCES_KEY,
-      JSON.stringify({ masterAiEnabled: globalAiEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: threshold })
+      JSON.stringify({ masterAiEnabled: allEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: threshold })
     );
     if (thresholdOverride) {
-      setCameras(cameras.map((camera) => ({ ...camera, sensitivity: threshold })));
-      await supabase.from("cameras").update({ sensitivity: threshold }).not("id", "is", null);
+      setCameras((previousCameras) => previousCameras.map((camera) => ({ ...camera, sensitivity: threshold })));
+      if (globalThresholdTimer.current) clearTimeout(globalThresholdTimer.current);
+      globalThresholdTimer.current = setTimeout(async () => {
+        if (cameras.length > 0) {
+          const camIds = cameras.map((camera) => camera.id);
+          await supabase.from("cameras").update({ sensitivity: threshold }).in("id", camIds);
+        }
+        globalThresholdTimer.current = null;
+      }, 300);
     }
   };
 
   const handleThresholdOverrideChange = async (enabled: boolean) => {
+    if (enabled) {
+      Object.values(thresholdTimers.current).forEach(clearTimeout);
+      thresholdTimers.current = {};
+    } else if (globalThresholdTimer.current) {
+      clearTimeout(globalThresholdTimer.current);
+      globalThresholdTimer.current = null;
+    }
     setThresholdOverride(enabled);
     localStorage.setItem(
       GLOBAL_PREFERENCES_KEY,
-      JSON.stringify({ masterAiEnabled: globalAiEnabled, thresholdOverrideEnabled: enabled, masterThreshold: globalThreshold })
+      JSON.stringify({ masterAiEnabled: allEnabled, thresholdOverrideEnabled: enabled, masterThreshold: globalThreshold })
     );
     if (enabled) {
-      setCameras(cameras.map((camera) => ({ ...camera, sensitivity: globalThreshold })));
-      await supabase.from("cameras").update({ sensitivity: globalThreshold }).not("id", "is", null);
+      setCameras((previousCameras) => previousCameras.map((camera) => ({ ...camera, sensitivity: globalThreshold })));
+      if (cameras.length > 0) {
+        const camIds = cameras.map((camera) => camera.id);
+        await supabase.from("cameras").update({ sensitivity: globalThreshold }).in("id", camIds);
+      }
     }
   };
 
@@ -284,7 +319,7 @@ export default function SettingsPage() {
                 <span className="text-sm text-zinc-300">Global Master AI Switch</span>
                 <input
                   type="checkbox"
-                  checked={globalAiEnabled}
+                  checked={allEnabled}
                   onChange={(e) => handleGlobalAiChange(e.target.checked)}
                   className="h-4 w-4 cursor-pointer accent-emerald-400"
                 />

@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [cameras, setCameras] = useState<any[]>([]);
   const [todayAlertsCount, setTodayAlertsCount] = useState<number>(0);
+  const [todayCriticalCount, setTodayCriticalCount] = useState(0);
 
   const formatTimeAgo = (dateString: string) => {
     const seconds = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
@@ -59,13 +60,23 @@ export default function Dashboard() {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const { count, error } = await supabase
-        .from("incidents")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", todayStart.toISOString());
+      const [todayAlerts, todayCritical] = await Promise.all([
+        supabase
+          .from("incidents")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", todayStart.toISOString()),
+        supabase
+          .from("incidents")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", todayStart.toISOString())
+          .gte("anomaly_score", 70),
+      ]);
 
-      if (!error && count !== null) {
-        setTodayAlertsCount(count);
+      if (!todayAlerts.error && todayAlerts.count !== null) {
+        setTodayAlertsCount(todayAlerts.count);
+      }
+      if (!todayCritical.error && todayCritical.count !== null) {
+        setTodayCriticalCount(todayCritical.count);
       }
     };
 
@@ -83,6 +94,9 @@ export default function Dashboard() {
           const newIncident = payload.new as Incident;
           setIncidents((prev) => [newIncident, ...prev.slice(0, 4)]);
           setTodayAlertsCount((prev) => prev + 1);
+          if (newIncident.anomaly_score >= 70) {
+            setTodayCriticalCount((prev) => prev + 1);
+          }
         }
       )
       .subscribe();
@@ -102,15 +116,9 @@ export default function Dashboard() {
     };
   }, []);
 
-  const criticalCount = incidents.filter((i) => i.anomaly_score >= 70).length;
   const totalFetchedCamerasCount = cameras.length;
-  const activeCameraCount = cameras.filter((camera) =>
-    camera.status == null || ["active", "online"].includes(camera.status.toLowerCase()) || camera.active === true
-  ).length;
-  const camerasWithAiEnabledCount = cameras.filter((camera) =>
-    (camera.status == null || ["active", "online"].includes(camera.status.toLowerCase()) || camera.active === true) &&
-    camera.ai_enabled !== false
-  ).length;
+  const activeCameraCount = cameras.filter((camera) => camera.status === "active").length;
+  const camerasWithAiEnabledCount = cameras.filter((camera) => camera.ai_enabled === true).length;
 
   const stats = [
     {
@@ -118,14 +126,14 @@ export default function Dashboard() {
       value: `${activeCameraCount} / ${totalFetchedCamerasCount}`,
       icon: Camera,
       color: "text-sky-400",
-      trend: `+${activeCameraCount} online`,
+      trend: `${activeCameraCount} ONLINE`,
     },
     {
       title: "Today's Alerts",
       value: `${todayAlertsCount}`,
       icon: ShieldAlert,
       color: "text-red-400",
-      trend: `${criticalCount} critical`,
+      trend: `${todayCriticalCount} critical`,
     },
     {
       title: "AI Monitored",
