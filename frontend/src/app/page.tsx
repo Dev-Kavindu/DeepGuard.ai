@@ -42,8 +42,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchCameraStats = async () => {
-      const { data } = await supabase.from("cameras").select("id, status, active, ai_enabled");
+      const { data, error } = await supabase.from("cameras").select("*");
       if (data) setCameras(data);
+      if (error) console.error("Error fetching camera stats:", error.message);
     };
 
     // 🟢 Recent detections සඳහා උපරිම අයිටම් 5ක් පමණක් ලබාගැනීම
@@ -117,7 +118,7 @@ export default function Dashboard() {
   }, []);
 
   const totalFetchedCamerasCount = cameras.length;
-  const activeCameraCount = cameras.filter((camera) => camera.status === "active").length;
+  const activeCameraCount = cameras.filter((camera) => camera.status === "active" || camera.status === undefined).length;
   const camerasWithAiEnabledCount = cameras.filter((camera) => camera.ai_enabled === true).length;
 
   const stats = [
