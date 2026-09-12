@@ -26,9 +26,7 @@ interface Incident {
 export default function Dashboard() {
   const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [activeCamCount, setActiveCamCount] = useState<number>(0);
-  const [aiActiveCount, setAiActiveCount] = useState<number>(0);
-  const [totalCamCount, setTotalCamCount] = useState<number>(0);
+  const [cameras, setCameras] = useState<any[]>([]);
   const [todayAlertsCount, setTodayAlertsCount] = useState<number>(0);
 
   const formatTimeAgo = (dateString: string) => {
@@ -44,16 +42,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchCameraStats = async () => {
       const { data } = await supabase.from("cameras").select("id, status, active, ai_enabled");
-      if (data) {
-        setTotalCamCount(data.length);
-        const active = data.filter((c) =>
-          c.status == null || ["active", "online"].includes(c.status.toLowerCase()) || c.active === true
-        );
-        const activeCount = active.length;
-        const aiActive = active.filter((c) => c.ai_enabled !== false).length;
-        setActiveCamCount(activeCount);
-        setAiActiveCount(aiActive);
-      }
+      if (data) setCameras(data);
     };
 
     // 🟢 Recent detections සඳහා උපරිම අයිටම් 5ක් පමණක් ලබාගැනීම
@@ -114,14 +103,22 @@ export default function Dashboard() {
   }, []);
 
   const criticalCount = incidents.filter((i) => i.anomaly_score >= 70).length;
+  const totalFetchedCamerasCount = cameras.length;
+  const activeCameraCount = cameras.filter((camera) =>
+    camera.status == null || ["active", "online"].includes(camera.status.toLowerCase()) || camera.active === true
+  ).length;
+  const camerasWithAiEnabledCount = cameras.filter((camera) =>
+    (camera.status == null || ["active", "online"].includes(camera.status.toLowerCase()) || camera.active === true) &&
+    camera.ai_enabled !== false
+  ).length;
 
   const stats = [
     {
       title: "Total Cameras",
-      value: `${activeCamCount} / ${totalCamCount}`, // 🟢 ඩිෆෝල්ට් 5 අයින් කර ඇත
+      value: `${activeCameraCount} / ${totalFetchedCamerasCount}`,
       icon: Camera,
       color: "text-sky-400",
-      trend: `+${activeCamCount} online`,
+      trend: `+${activeCameraCount} online`,
     },
     {
       title: "Today's Alerts",
@@ -132,16 +129,16 @@ export default function Dashboard() {
     },
     {
       title: "AI Monitored",
-      value: `${aiActiveCount} / ${totalCamCount}`,
+      value: `${camerasWithAiEnabledCount} / ${totalFetchedCamerasCount}`,
       icon: BrainCircuit,
-      color: aiActiveCount > 0 ? "text-emerald-400" : "text-sky-400",
-      trend: aiActiveCount > 0 ? (
+      color: camerasWithAiEnabledCount > 0 ? "text-emerald-400" : "text-sky-400",
+      trend: camerasWithAiEnabledCount > 0 ? (
         <span className="flex items-center gap-1.5 text-emerald-400">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
-          {aiActiveCount} RUNNING ON GPU
+          {camerasWithAiEnabledCount} RUNNING ON GPU
         </span>
       ) : (
         <span className="text-sky-400">ALL PASSIVE (STANDBY)</span>

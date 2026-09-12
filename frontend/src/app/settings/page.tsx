@@ -120,11 +120,23 @@ export default function SettingsPage() {
 
   const handleThresholdChange = async (id: number, newThreshold: number) => {
     setCameras(cameras.map((c) => (c.id === id ? { ...c, sensitivity: newThreshold } : c)));
+    setThresholdOverride(false);
+    localStorage.setItem(
+      GLOBAL_PREFERENCES_KEY,
+      JSON.stringify({ masterAiEnabled: globalAiEnabled, thresholdOverrideEnabled: false, masterThreshold: globalThreshold })
+    );
     await supabase.from("cameras").update({ sensitivity: newThreshold }).eq("id", id);
   };
 
   const handleAiEnabledChange = async (id: number, aiEnabled: boolean) => {
-    setCameras(cameras.map((c) => (c.id === id ? { ...c, ai_enabled: aiEnabled } : c)));
+    const updatedCameras = cameras.map((c) => (c.id === id ? { ...c, ai_enabled: aiEnabled } : c));
+    const allAiEnabled = updatedCameras.every((camera) => camera.ai_enabled !== false);
+    setCameras(updatedCameras);
+    setGlobalAiEnabled(allAiEnabled);
+    localStorage.setItem(
+      GLOBAL_PREFERENCES_KEY,
+      JSON.stringify({ masterAiEnabled: allAiEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: globalThreshold })
+    );
     await supabase.from("cameras").update({ ai_enabled: aiEnabled }).eq("id", id);
   };
 
