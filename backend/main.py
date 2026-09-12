@@ -148,6 +148,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
 
                 # 4. Trigger Alarm & Save Evidence
                 if anomaly_score >= threshold:
+                    detection_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
                     print(f"🚨 ANOMALY: {predicted_class} | Score: {anomaly_score:.2f}% | Cam: {camera_id}")
                     
                     clip_name = f"evidence_cam{camera_id}_{int(time.time())}.mp4"
@@ -158,7 +159,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     # වීඩියෝවට Watermark යෙදීම (දිනය, වේලාව සහ කැමරා නම)
                     for f in raw_buffer:
                         watermarked_frame = f.copy()
-                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        timestamp = detection_time.strftime("%Y-%m-%d %H:%M:%S")
                         watermark_text = f"DeepGuard.ai | {camera_name} | {timestamp}"
                         
                         # Black background box for text
@@ -184,7 +185,8 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                         "anomaly_type": predicted_class,
                         "anomaly_score": float(anomaly_score),
                         "video_url": public_url,
-                        "is_false_alarm": False
+                        "is_false_alarm": False,
+                        "created_at": detection_time.isoformat()
                     }).execute()
                     
                     # ඊළඟ Alert එකට පෙර තත්පර 10ක Cooldown එකක් ලබා දීම

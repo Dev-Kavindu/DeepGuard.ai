@@ -46,7 +46,7 @@ export default function Dashboard() {
       if (data) {
         setTotalCamCount(data.length);
         const active = data.filter(
-          (c) => c.status === "active" || c.active === true || c.status === null
+          (c) => c.status == null || ["active", "online"].includes(c.status.toLowerCase()) || c.active === true
         ).length;
         setActiveCamCount(active);
       }
@@ -146,7 +146,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-5 sm:space-y-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
@@ -159,7 +159,7 @@ export default function Dashboard() {
             Real-time situational awareness across your protected site.
           </p>
         </div>
-        <div className="flex w-fit items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5">
+        <div className="flex w-fit self-start items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 sm:self-auto">
           <span className="relative flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
@@ -170,11 +170,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <div
             key={stat.title}
-            className="glass-panel group flex cursor-default items-center gap-4 p-5 smooth-transition hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/70"
+            className="glass-panel group flex cursor-default items-center gap-3 p-4 smooth-transition hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/70 sm:gap-4 sm:p-5"
           >
             <div className={`rounded-xl bg-zinc-800/50 p-3 ${stat.color}`}>
               <stat.icon size={24} />
@@ -192,12 +192,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="glass-panel relative flex h-fit flex-col overflow-hidden p-1.5 xl:col-span-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
+        <div className="glass-panel relative flex h-fit min-w-0 flex-col overflow-hidden p-0.5 sm:p-1.5 xl:col-span-2">
           <CameraGrid />
         </div>
 
-        <div className="glass-panel flex max-h-[600px] flex-col p-5">
+        <div className="glass-panel flex max-h-[600px] min-w-0 flex-col p-4 sm:p-5">
           <div className="mb-4 flex items-start justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">

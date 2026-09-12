@@ -102,7 +102,7 @@ function VaultContent() {
   );
 
   return (
-    <div className="relative space-y-7">
+    <div className="relative space-y-5 sm:space-y-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
@@ -111,7 +111,7 @@ function VaultContent() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Incident Vault</h1>
           <p className="mt-1 text-sm text-zinc-500">Review and manage AI-detected security events.</p>
         </div>
-        <button className="flex w-fit items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-white smooth-transition hover:bg-zinc-700">
+        <button className="flex w-fit self-start items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-white smooth-transition hover:bg-zinc-700 sm:self-auto">
           <Calendar size={18} />
           <span>Last 7 Days</span>
         </button>
@@ -142,15 +142,15 @@ function VaultContent() {
             <p className="mt-1 max-w-sm text-xs text-zinc-500">{error}</p>
           </div>
         ) : (
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[680px] text-left text-sm sm:min-w-[760px]">
             <thead className="bg-zinc-900/50 text-zinc-400 border-b border-zinc-800/50">
               <tr>
-                <th className="px-6 py-4 font-medium">Incident ID</th>
-                <th className="px-6 py-4 font-medium">Camera Location</th>
-                <th className="px-6 py-4 font-medium">Event Details</th>
-                <th className="px-6 py-4 font-medium">Anomaly Score</th>
-                <th className="px-6 py-4 font-medium">Date & Time</th>
-                <th className="px-6 py-4 font-medium text-right">Actions</th>
+                <th className="px-3 py-4 font-medium sm:px-6">Incident ID</th>
+                <th className="px-3 py-4 font-medium sm:px-6">Camera Location</th>
+                <th className="px-3 py-4 font-medium sm:px-6">Event Details</th>
+                <th className="px-3 py-4 font-medium sm:px-6">Anomaly Score</th>
+                <th className="px-3 py-4 font-medium sm:px-6">Date & Time</th>
+                <th className="px-3 py-4 font-medium text-right sm:px-6">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
@@ -179,12 +179,12 @@ function VaultContent() {
                       incident.is_false_alarm ? "opacity-50 grayscale" : ""
                     } ${playParam && Number(playParam) === incident.id ? "bg-blue-500/15 border-l-2 border-blue-400" : ""}`}
                   >
-                    <td className="px-6 py-4 font-mono text-zinc-300">
+                    <td className="px-3 py-4 font-mono text-zinc-300 sm:px-6">
                       INC-{incident.id.toString().padStart(4, "0")}
                     </td>
                     {/* 🟢 කැමරා නම සෘජුවම incident.camera_name මඟින් ලබාගැනීම (කැමරාව මැකුවත් නම වෙනස් නොවේ) */}
-                    <td className="px-6 py-4">{incident.camera_name || `Camera ${incident.camera_id}`}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4 sm:px-6">{incident.camera_name || `Camera ${incident.camera_id}`}</td>
+                    <td className="px-3 py-4 sm:px-6">
                       <div className="flex flex-col gap-1 items-start">
                         <span className={`font-semibold ${incident.is_false_alarm ? "text-zinc-500 line-through" : "text-zinc-200"}`}>
                           {incident.is_false_alarm ? "False Alarm" : "Suspicious Activity"}
@@ -196,15 +196,15 @@ function VaultContent() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4 sm:px-6">
                       <span className={incident.anomaly_score >= 90 ? "text-red-400 font-bold" : "text-amber-400 font-bold"}>
                         {incident.anomaly_score.toFixed(1)}%
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-zinc-400">
+                    <td className="px-3 py-4 text-zinc-400 sm:px-6">
                       {new Date(incident.created_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4 sm:px-6">
                       <div className="flex justify-end gap-3">
                         {!incident.is_false_alarm && (
                           <button onClick={() => handleFalseAlarm(incident.id)} className="text-zinc-400 hover:text-amber-400 smooth-transition" title="Mark as False Alarm">
@@ -248,7 +248,7 @@ function VaultContent() {
       {/* Video Player Modal */}
       {selectedVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className="relative max-h-[90vh] w-[92vw] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <div className="relative max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/80 p-4">
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Play size={18} className="text-blue-500" /> Evidence Playback
@@ -269,7 +269,7 @@ function VaultContent() {
       {/* Custom Delete Confirmation Modal */}
       {deleteConfirmId !== null && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+          <div className="w-[95vw] max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl sm:p-6">
             <div className="flex items-center gap-3 text-red-400 mb-4">
               <ShieldAlert size={24} />
               <h3 className="text-lg font-bold text-white">Delete Incident</h3>

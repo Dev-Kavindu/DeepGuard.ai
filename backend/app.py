@@ -135,7 +135,7 @@ def extract_features(video_path):
     return np.array(features_list)
 
 # Background Task: Watermark and Upload to Supabase
-def process_evidence(video_path: str, predicted_class: str, anomaly_score: float, camera_id: int = 1):
+def process_evidence(video_path: str, predicted_class: str, anomaly_score: float, camera_id: int = 1, *, detection_time: datetime.datetime):
     database = get_supabase()
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
@@ -153,7 +153,7 @@ def process_evidence(video_path: str, predicted_class: str, anomaly_score: float
         if not ret: break
         
         # Add Watermark
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = detection_time.strftime("%Y-%m-%d %H:%M:%S")
         watermark_text = f"DeepGuard.ai | CAM {camera_id} | {timestamp} | {predicted_class}"
         cv2.rectangle(frame, (10, height - 40), (800, height - 10), (0, 0, 0), -1)
         cv2.putText(frame, watermark_text, (20, height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
@@ -179,6 +179,7 @@ def process_evidence(video_path: str, predicted_class: str, anomaly_score: float
             "anomaly_score": float(anomaly_score),
             "video_url": public_url,
             "is_false_alarm": False,
+            "created_at": detection_time.isoformat(),
         }).execute()
     finally:
         if os.path.exists(watermarked_path):
@@ -226,7 +227,8 @@ async def analyze_video(
 
         # Anomaly එකක් නම්, Video එක Watermark කරලා Supabase එකට දාන්න Background Task එකක් යැවීම
         if is_alarm:
-            background_tasks.add_task(process_evidence, temp_video_path, predicted_class, anomaly_score, camera_id)
+            detection_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+            background_tasks.add_task(process_evidence, temp_video_path, predicted_class, anomaly_score, camera_id, detection_time=detection_time)
         else:
             # Anomaly එකක් නැත්නම්, temp file එක මකා දැමීම
             background_tasks.add_task(os.remove, temp_video_path)

@@ -222,6 +222,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                 print(f"📊 [INFERENCE] Cam {camera_id} | Class: {predicted_class} | Score: {anomaly_score:.1f}% (Threshold: {threshold}%)")
 
                 if anomaly_score >= threshold:
+                    detection_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
                     if predicted_class == "Normal":
                         best_anomaly_idx = torch.argmax(peak_probs[1:]).item() + 1
                         predicted_class = CLASSES[best_anomaly_idx]
@@ -238,7 +239,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                     
                     for f in raw_buffer:
                         watermarked_frame = f.copy()
-                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        timestamp = detection_time.strftime("%Y-%m-%d %H:%M:%S")
                         watermark_text = f"DeepGuard.ai | {camera_name} | {timestamp}"
                         
                         cv2.rectangle(watermarked_frame, (10, height - 40), (700, height - 10), (0, 0, 0), -1)
@@ -270,9 +271,6 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                         os.remove(clip_path)
                     
                     # 🟢 Sri Lanka Standard Time (UTC+5:30) සහ camera_name දත්ත ගබඩාවට යැවීම
-                    sri_lanka_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-                    local_time = datetime.datetime.now(sri_lanka_tz).isoformat()
-
                     supabase.table("incidents").insert({
                         "camera_id": camera_id,
                         "camera_name": camera_name,  
@@ -280,7 +278,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                         "anomaly_score": float(anomaly_score),
                         "video_clip_url": public_url,
                         "is_false_alarm": False,
-                        "created_at": local_time
+                        "created_at": detection_time.isoformat()
                     }).execute()
                     
                     print(f"💾 Incident saved successfully to Supabase: {clip_name}")

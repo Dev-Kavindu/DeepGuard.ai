@@ -85,9 +85,9 @@ export default function CameraGrid() {
   }, []);
 
   return (
-    <div className="relative z-20 grid w-full content-start grid-cols-1 gap-4 p-3 sm:p-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="relative z-20 grid w-full content-start grid-cols-1 gap-3 p-2 sm:gap-4 sm:p-4 md:grid-cols-2 xl:grid-cols-3">
       {isLoading ? (
-        <div className="col-span-full flex min-h-[360px] flex-col items-center justify-center text-zinc-500">
+        <div className="col-span-full flex min-h-[280px] flex-col items-center justify-center text-zinc-500 sm:min-h-[360px]">
           <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-400/10">
             <Activity className="animate-spin text-emerald-400" size={20} />
           </span>
@@ -95,13 +95,13 @@ export default function CameraGrid() {
           <span className="mt-1 text-xs text-zinc-600">Establishing secure live channels...</span>
         </div>
       ) : error ? (
-        <div className="col-span-full flex min-h-[360px] flex-col items-center justify-center text-center">
+        <div className="col-span-full flex min-h-[280px] flex-col items-center justify-center text-center sm:min-h-[360px]">
           <WifiOff className="mb-3 text-red-400" size={30} />
           <p className="text-sm font-medium text-zinc-200">Unable to load camera feeds</p>
           <p className="mt-1 max-w-xs text-xs text-zinc-500">{error}</p>
         </div>
       ) : cameras.length === 0 ? (
-        <div className="col-span-full flex min-h-[360px] flex-col items-center justify-center text-zinc-500">
+        <div className="col-span-full flex min-h-[280px] flex-col items-center justify-center text-zinc-500 sm:min-h-[360px]">
           <Video className="mb-3 text-zinc-600" size={32} />
           <span className="text-sm font-medium text-zinc-300">No cameras configured</span>
           <span className="mt-1 text-xs text-zinc-600">Add a camera in Settings to begin monitoring.</span>
@@ -143,13 +143,13 @@ export default function CameraGrid() {
               )}
             </div>
 
-            <div className="absolute top-0 z-10 flex w-full items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-3">
+            <div className="absolute top-0 z-10 flex w-full items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-2 sm:p-3">
               <div className="flex items-center gap-2">
                 {/* Index + 1 මඟින් කැමරා අංක පිළිවෙළට CAM 1, CAM 2 ලෙස ලබා දීම */}
                 <span className="rounded border border-white/10 bg-black/60 px-2 py-1 font-mono text-[10px] font-bold text-white backdrop-blur-md">
                   CAM {index + 1}
                 </span>
-                <span className="max-w-[10rem] truncate text-sm font-medium text-zinc-200 shadow-black drop-shadow-lg">
+                <span className="max-w-[8rem] truncate text-sm font-medium text-zinc-200 shadow-black drop-shadow-lg sm:max-w-[10rem]">
                   {cam.name}
                 </span>
               </div>
@@ -184,7 +184,7 @@ export default function CameraGrid() {
               )}
             </div>
 
-            <div className="absolute bottom-0 z-10 flex w-full items-end justify-between bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3">
+            <div className="absolute bottom-0 z-10 flex w-full items-end justify-between bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 sm:p-3">
               <span className="text-xs font-mono text-white/90 drop-shadow-md">
                 {currentTime || "Loading..."}
               </span>

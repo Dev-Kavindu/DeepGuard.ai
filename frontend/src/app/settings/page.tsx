@@ -2,9 +2,7 @@
 
 import {
   Camera,
-  Check,
   Plus,
-  Save,
   Settings2,
   Trash2,
   Video,
@@ -23,7 +21,9 @@ export default function SettingsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [globalAiEnabled, setGlobalAiEnabled] = useState(true);
+  const [thresholdOverride, setThresholdOverride] = useState(false);
+  const [globalThreshold, setGlobalThreshold] = useState(50);
   
   // Custom delete modal state
   const [camToDelete, setCamToDelete] = useState<number | null>(null);
@@ -104,8 +104,30 @@ export default function SettingsPage() {
     await supabase.from("cameras").update({ ai_enabled: aiEnabled }).eq("id", id);
   };
 
+  const handleGlobalAiChange = async (aiEnabled: boolean) => {
+    setGlobalAiEnabled(aiEnabled);
+    setCameras(cameras.map((camera) => ({ ...camera, ai_enabled: aiEnabled })));
+    await supabase.from("cameras").update({ ai_enabled: aiEnabled }).not("id", "is", null);
+  };
+
+  const handleGlobalThresholdChange = async (threshold: number) => {
+    setGlobalThreshold(threshold);
+    if (thresholdOverride) {
+      setCameras(cameras.map((camera) => ({ ...camera, sensitivity: threshold })));
+      await supabase.from("cameras").update({ sensitivity: threshold }).not("id", "is", null);
+    }
+  };
+
+  const handleThresholdOverrideChange = async (enabled: boolean) => {
+    setThresholdOverride(enabled);
+    if (enabled) {
+      setCameras(cameras.map((camera) => ({ ...camera, sensitivity: globalThreshold })));
+      await supabase.from("cameras").update({ sensitivity: globalThreshold }).not("id", "is", null);
+    }
+  };
+
   return (
-    <div className="relative space-y-7">
+    <div className="relative space-y-5 sm:space-y-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">Control plane / Sources</p>
@@ -115,15 +137,15 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="flex w-fit items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-500/15 smooth-transition hover:bg-emerald-300"
+          className="flex w-fit self-start items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-500/15 smooth-transition hover:bg-emerald-300 sm:self-auto"
         >
           <Plus size={20} />
           <span>Add New Camera</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           {error ? (
             <div className="glass-panel flex min-h-56 flex-col items-center justify-center border-dashed p-10 text-center">
               <Camera size={28} className="mb-3 text-red-400" />
@@ -144,7 +166,7 @@ export default function SettingsPage() {
             </div>
           ) : (
             cameras.map((cam) => (
-              <div key={cam.id} className="glass-panel group flex flex-col gap-4 p-5 smooth-transition hover:border-zinc-700">
+              <div key={cam.id} className="glass-panel group flex min-w-0 flex-col gap-4 p-4 smooth-transition hover:border-zinc-700 sm:p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="rounded-lg bg-zinc-800 p-2 group-hover:bg-emerald-400/10 group-hover:text-emerald-400 smooth-transition">
@@ -211,29 +233,47 @@ export default function SettingsPage() {
             <h3 className="mb-4 border-b border-zinc-800 pb-3 text-lg font-semibold">Global Preferences</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-300">Auto-Delete Old Videos (7 Days)</span>
-                <input type="checkbox" defaultChecked className="accent-blue-500 w-4 h-4 cursor-pointer" />
+                <span className="text-sm text-zinc-300">Global Master AI Switch</span>
+                <input
+                  type="checkbox"
+                  checked={globalAiEnabled}
+                  onChange={(e) => handleGlobalAiChange(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-emerald-400"
+                />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-300">Send Email Alerts for Criticals</span>
-                <input type="checkbox" defaultChecked className="accent-blue-500 w-4 h-4 cursor-pointer" />
+                <span className="text-sm text-zinc-300">Global Threshold Override</span>
+                <input
+                  type="checkbox"
+                  checked={thresholdOverride}
+                  onChange={(e) => handleThresholdOverrideChange(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-emerald-400"
+                />
+              </div>
+              <div className={thresholdOverride ? "" : "opacity-50"}>
+                <div className="mb-2 flex items-center justify-between">
+                  <label htmlFor="global-threshold" className="text-sm text-zinc-300">Master AI Threshold</label>
+                  <span className="text-sm font-bold text-blue-400">{globalThreshold}%</span>
+                </div>
+                <input
+                  id="global-threshold"
+                  type="range"
+                  min="10"
+                  max="90"
+                  value={globalThreshold}
+                  disabled={!thresholdOverride}
+                  onChange={(e) => handleGlobalThresholdChange(parseInt(e.target.value, 10))}
+                  className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-emerald-400 disabled:cursor-not-allowed"
+                />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setSaved(true)}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-800 py-2 text-sm text-white smooth-transition hover:bg-zinc-700"
-            >
-              {saved ? <Check size={18} className="text-emerald-400" /> : <Save size={18} />}
-              {saved ? "Preferences Saved" : "Save Preferences"}
-            </button>
           </div>
         </div>
       </div>
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="relative max-h-[90vh] w-[92vw] max-w-lg overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl sm:p-6">
+          <div className="relative max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl sm:p-6">
             <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-white smooth-transition">
               <X size={20} />
             </button>
