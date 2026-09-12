@@ -12,6 +12,8 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+const GLOBAL_PREFERENCES_KEY = "deepguard-global-preferences";
+
 export default function SettingsPage() {
   const [cameras, setCameras] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +32,29 @@ export default function SettingsPage() {
 
   const fetchCameras = useCallback(async () => {
     const { data, error } = await supabase.from("cameras").select("*").order("id", { ascending: true });
-    if (data) setCameras(data);
+    if (data) {
+      setCameras(data);
+      const storedPreferences = localStorage.getItem(GLOBAL_PREFERENCES_KEY);
+      if (storedPreferences) {
+        try {
+          const preferences = JSON.parse(storedPreferences);
+          if (typeof preferences.masterAiEnabled === "boolean") {
+            setGlobalAiEnabled(preferences.masterAiEnabled);
+          }
+          if (typeof preferences.thresholdOverrideEnabled === "boolean") {
+            setThresholdOverride(preferences.thresholdOverrideEnabled);
+          }
+          if (typeof preferences.masterThreshold === "number") {
+            setGlobalThreshold(preferences.masterThreshold);
+          }
+        } catch {
+          localStorage.removeItem(GLOBAL_PREFERENCES_KEY);
+          setGlobalAiEnabled(data.length === 0 || !data.every((camera) => camera.ai_enabled === false));
+        }
+      } else {
+        setGlobalAiEnabled(data.length === 0 || !data.every((camera) => camera.ai_enabled === false));
+      }
+    }
     if (error) setError(error.message);
     setIsLoading(false);
   }, []);
@@ -106,12 +130,20 @@ export default function SettingsPage() {
 
   const handleGlobalAiChange = async (aiEnabled: boolean) => {
     setGlobalAiEnabled(aiEnabled);
+    localStorage.setItem(
+      GLOBAL_PREFERENCES_KEY,
+      JSON.stringify({ masterAiEnabled: aiEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: globalThreshold })
+    );
     setCameras(cameras.map((camera) => ({ ...camera, ai_enabled: aiEnabled })));
     await supabase.from("cameras").update({ ai_enabled: aiEnabled }).not("id", "is", null);
   };
 
   const handleGlobalThresholdChange = async (threshold: number) => {
     setGlobalThreshold(threshold);
+    localStorage.setItem(
+      GLOBAL_PREFERENCES_KEY,
+      JSON.stringify({ masterAiEnabled: globalAiEnabled, thresholdOverrideEnabled: thresholdOverride, masterThreshold: threshold })
+    );
     if (thresholdOverride) {
       setCameras(cameras.map((camera) => ({ ...camera, sensitivity: threshold })));
       await supabase.from("cameras").update({ sensitivity: threshold }).not("id", "is", null);
@@ -120,6 +152,10 @@ export default function SettingsPage() {
 
   const handleThresholdOverrideChange = async (enabled: boolean) => {
     setThresholdOverride(enabled);
+    localStorage.setItem(
+      GLOBAL_PREFERENCES_KEY,
+      JSON.stringify({ masterAiEnabled: globalAiEnabled, thresholdOverrideEnabled: enabled, masterThreshold: globalThreshold })
+    );
     if (enabled) {
       setCameras(cameras.map((camera) => ({ ...camera, sensitivity: globalThreshold })));
       await supabase.from("cameras").update({ sensitivity: globalThreshold }).not("id", "is", null);
@@ -250,7 +286,8 @@ export default function SettingsPage() {
                   className="h-4 w-4 cursor-pointer accent-emerald-400"
                 />
               </div>
-              <div className={thresholdOverride ? "" : "opacity-50"}>
+              {thresholdOverride && (
+                <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label htmlFor="global-threshold" className="text-sm text-zinc-300">Master AI Threshold</label>
                   <span className="text-sm font-bold text-blue-400">{globalThreshold}%</span>
@@ -263,9 +300,10 @@ export default function SettingsPage() {
                   value={globalThreshold}
                   disabled={!thresholdOverride}
                   onChange={(e) => handleGlobalThresholdChange(parseInt(e.target.value, 10))}
-                  className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-emerald-400 disabled:cursor-not-allowed"
+                  className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-emerald-400"
                 />
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Activity,
   ArrowUpRight,
+  BrainCircuit,
   Camera,
   Radio,
   ShieldAlert,
@@ -27,6 +27,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [activeCamCount, setActiveCamCount] = useState<number>(0);
+  const [aiActiveCount, setAiActiveCount] = useState<number>(0);
   const [totalCamCount, setTotalCamCount] = useState<number>(0);
   const [todayAlertsCount, setTodayAlertsCount] = useState<number>(0);
 
@@ -42,13 +43,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchCameraStats = async () => {
-      const { data } = await supabase.from("cameras").select("id, status, active");
+      const { data } = await supabase.from("cameras").select("id, status, active, ai_enabled");
       if (data) {
         setTotalCamCount(data.length);
-        const active = data.filter(
-          (c) => c.status == null || ["active", "online"].includes(c.status.toLowerCase()) || c.active === true
-        ).length;
-        setActiveCamCount(active);
+        const active = data.filter((c) =>
+          c.status == null || ["active", "online"].includes(c.status.toLowerCase()) || c.active === true
+        );
+        const activeCount = active.length;
+        const aiActive = active.filter((c) => c.ai_enabled !== false).length;
+        setActiveCamCount(activeCount);
+        setAiActiveCount(aiActive);
       }
     };
 
@@ -111,12 +115,9 @@ export default function Dashboard() {
 
   const criticalCount = incidents.filter((i) => i.anomaly_score >= 70).length;
 
-  // 🟢 System health එක active cameras සංඛ්‍යාව මත පදනම්ව වෙනස් වන සේ සැකසීම
-  const systemHealthValue = totalCamCount > 0 ? ((activeCamCount / totalCamCount) * 100).toFixed(1) + "%" : "100%";
-
   const stats = [
     {
-      title: "Active Cameras",
+      title: "Total Cameras",
       value: `${activeCamCount} / ${totalCamCount}`, // 🟢 ඩිෆෝල්ට් 5 අයින් කර ඇත
       icon: Camera,
       color: "text-sky-400",
@@ -130,11 +131,21 @@ export default function Dashboard() {
       trend: `${criticalCount} critical`,
     },
     {
-      title: "System Health",
-      value: systemHealthValue, // 🟢 රියල්ටයිම් කැමරා තත්ත්වය මත පදනම් වේ
-      icon: Activity,
-      color: "text-emerald-400",
-      trend: activeCamCount > 0 ? "Optimal" : "Standby",
+      title: "AI Monitored",
+      value: `${aiActiveCount} / ${totalCamCount}`,
+      icon: BrainCircuit,
+      color: aiActiveCount > 0 ? "text-emerald-400" : "text-sky-400",
+      trend: aiActiveCount > 0 ? (
+        <span className="flex items-center gap-1.5 text-emerald-400">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          </span>
+          {aiActiveCount} RUNNING ON GPU
+        </span>
+      ) : (
+        <span className="text-sky-400">ALL PASSIVE (STANDBY)</span>
+      ),
     },
     {
       title: "Storage Used",
