@@ -83,6 +83,7 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
     raw_buffer = []
     frame_count = 0
     cooldown_frames = 0
+    last_status_check = time.time()
 
     print(f"🎬 Processing Stream... (Threshold: {threshold}%)")
 
@@ -98,6 +99,17 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
                 raw_buffer.pop(0)
 
             frame_count += 1
+            if time.time() - last_status_check >= 15:
+                last_status_check = time.time()
+                camera_record = supabase.table("cameras").select("status, ai_enabled").eq("id", camera_id).execute()
+                if not camera_record.data:
+                    break
+                camera_state = camera_record.data[0]
+                camera_status = (camera_state.get("status") or "active").lower()
+                if camera_status not in ["active", "online"] or camera_state.get("ai_enabled", True) is False:
+                    print(f"[STOP] AI disabled or camera inactive for Cam {camera_id}")
+                    break
+
             if cooldown_frames > 0:
                 cooldown_frames -= 1
                 continue
@@ -195,7 +207,8 @@ def main():
     # Active කැමරා පමණක් පෙරීම (status === 'active' හෝ active === True)
     active_cams = [
         cam for cam in response.data 
-        if cam.get("status") == "active" or cam.get("active") is True or cam.get("status") is None
+        if (cam.get("status") == "active" or cam.get("active") is True or cam.get("status") is None)
+        and cam.get("ai_enabled", True) is not False
     ]
     
     print(f"🚀 Starting DeepGuard AI for {len(active_cams)} active cameras...")

@@ -168,14 +168,14 @@ def process_camera_feed(camera_id: int, camera_name: str, video_url: str, thresh
             if current_time - last_status_check >= 15:
                 last_status_check = current_time
                 try:
-                    cam_record = supabase.table("cameras").select("status").eq("id", camera_id).execute()
+                    cam_record = supabase.table("cameras").select("status, ai_enabled").eq("id", camera_id).execute()
                     if not cam_record.data:
                         print(f"🛑 Camera {camera_id} was DELETED from Supabase. Terminating GPU worker.")
                         break
                     
                     cam_status = (cam_record.data[0].get("status") or "active").lower()
-                    if cam_status not in ["active", "online"]:
-                        print(f"🛑 Camera {camera_id} deactivated by user. Shutting down GPU worker.")
+                    if cam_status not in ["active", "online"] or cam_record.data[0].get("ai_enabled", True) is False:
+                        print(f"🛑 Camera {camera_id} is inactive or AI-disabled. Shutting down GPU worker.")
                         break
                 except Exception as e:
                     print(f"⚠️ Warning: Could not check camera status - {e}")
@@ -308,10 +308,11 @@ async def camera_webhook(request: Request):
     
     cam_status = (record.get("status") or "active").lower()
     is_active = cam_status in ["active", "online"]
+    ai_enabled = record.get("ai_enabled", True) is not False
 
-    if event_type in ["INSERT", "UPDATE"] and is_active and video_url:
+    if event_type in ["INSERT", "UPDATE"] and is_active and ai_enabled and video_url:
         print(f"⚡ [WEBHOOK TRIGGER] Spawning T4 GPU Worker for Camera {cam_id}: {cam_name}")
         process_camera_feed.spawn(cam_id, cam_name, video_url, threshold)
         return {"status": "success", "message": f"Worker spawned for camera {cam_id}"}
 
-    return {"status": "ignored", "message": "Camera is not active or missing stream URL"}
+    return {"status": "ignored", "message": "Camera is passive, inactive, or missing stream URL"}

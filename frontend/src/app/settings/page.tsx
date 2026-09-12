@@ -18,7 +18,7 @@ export default function SettingsPage() {
   const [cameras, setCameras] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newCam, setNewCam] = useState({ name: "", url: "", threshold: 50 });
+  const [newCam, setNewCam] = useState({ name: "", url: "", threshold: 50, aiEnabled: true });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
@@ -71,13 +71,13 @@ export default function SettingsPage() {
     setIsSaving(true);
     const { data, error } = await supabase
       .from("cameras")
-      .insert([{ name: newCam.name, stream_url: newCam.url, sensitivity: newCam.threshold, status: "active" }])
+      .insert([{ name: newCam.name, stream_url: newCam.url, sensitivity: newCam.threshold, status: "active", ai_enabled: newCam.aiEnabled }])
       .select();
 
     if (data) {
       setCameras([...cameras, data[0]]);
       setIsModalOpen(false);
-      setNewCam({ name: "", url: "", threshold: 50 });
+      setNewCam({ name: "", url: "", threshold: 50, aiEnabled: true });
       setUploadStatus("");
     } else {
       alert(`Error adding camera: ${error?.message || "Unknown database error"}`);
@@ -97,6 +97,11 @@ export default function SettingsPage() {
   const handleThresholdChange = async (id: number, newThreshold: number) => {
     setCameras(cameras.map((c) => (c.id === id ? { ...c, sensitivity: newThreshold } : c)));
     await supabase.from("cameras").update({ sensitivity: newThreshold }).eq("id", id);
+  };
+
+  const handleAiEnabledChange = async (id: number, aiEnabled: boolean) => {
+    setCameras(cameras.map((c) => (c.id === id ? { ...c, ai_enabled: aiEnabled } : c)));
+    await supabase.from("cameras").update({ ai_enabled: aiEnabled }).eq("id", id);
   };
 
   return (
@@ -174,6 +179,18 @@ export default function SettingsPage() {
                     </label>
                     <span className="text-sm font-bold text-blue-400">{cam.sensitivity}%</span>
                   </div>
+                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-zinc-800/50 bg-zinc-950/50 p-4">
+                    <span>
+                      <span className="block text-sm font-medium text-zinc-300">AI anomaly monitoring</span>
+                      <span className="mt-1 block text-xs text-zinc-500">Disable to keep this feed as passive CCTV without GPU processing.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={cam.ai_enabled !== false}
+                      onChange={(e) => handleAiEnabledChange(cam.id, e.target.checked)}
+                      className="h-4 w-4 cursor-pointer accent-emerald-400"
+                    />
+                  </label>
                   <input
                     type="range"
                     min="10"
@@ -234,6 +251,18 @@ export default function SettingsPage() {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-blue-500 smooth-transition"
                 />
               </div>
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-800/50 bg-zinc-950/50 p-3">
+                <span>
+                  <span className="block text-sm font-medium text-zinc-300">Enable AI monitoring</span>
+                  <span className="mt-1 block text-xs text-zinc-500">Passive CCTV uses no GPU worker.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={newCam.aiEnabled}
+                  onChange={(e) => setNewCam({ ...newCam, aiEnabled: e.target.checked })}
+                  className="h-4 w-4 cursor-pointer accent-emerald-400"
+                />
+              </label>
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">Stream URL (RTSP or MP4 Link)</label>
                 <input
